@@ -54,4 +54,9 @@ class PaymentPlan extends Model
     {
         return $this->hasMany(CheckCF::class, 'cf_1755', 'paymentplansid');
     }
+
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'paymentplansid', 'crmid');
+    }
 }

@@ -80,4 +80,9 @@ class Invoice extends Model
     {
         return $this->belongsTo(ContactCF::class, 'contactid', 'contactid');
     }
+
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'invoiceid', 'crmid');
+    }
 }

@@ -42,4 +42,9 @@ class Document extends Model
         return $this->hasManyThrough(Attachment::class, SeAttachmentsRel::class, 'crmid', 'attachmentsid', 'notesid', 'attachmentsid');
     }
 
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'notesid', 'crmid');
+    }
+
 }

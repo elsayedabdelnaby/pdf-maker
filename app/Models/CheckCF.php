@@ -56,4 +56,9 @@ class CheckCF extends Model
     {
         return $this->belongsTo(Invoice::class, 'cf_1781', 'invoiceid');
     }
+
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'checksid', 'crmid');
+    }
 }

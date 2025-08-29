@@ -16,5 +16,8 @@ class Check extends Model
         'bankname'
     ];
 
-    
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'checksid', 'crmid');
+    }
 }

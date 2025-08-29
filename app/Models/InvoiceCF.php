@@ -91,4 +91,9 @@ class InvoiceCF extends Model
     {
         return $this->hasOne(PaymentPlan::class, 'cf_1789', 'paymentplansid');
     }
+
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'invoiceid', 'crmid');
+    }
 }

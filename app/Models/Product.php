@@ -58,4 +58,9 @@ class Product extends Model
     {
         return $this->hasManyThrough(Document::class, DocumentRel::class, 'crmid', 'notesid', 'productid', 'notesid');
     }
+
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'productid', 'crmid');
+    }
 }

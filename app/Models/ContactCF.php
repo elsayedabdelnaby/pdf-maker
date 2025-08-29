@@ -31,4 +31,9 @@ class ContactCF extends Model
         return $this->belongsTo(ContactDetails::class, 'contactid', 'contactid');
     }
 
+    public function crmEntity()
+    {
+        return $this->belongsTo(CRMEntity::class, 'contactid', 'crmid');
+    }
+
 }
