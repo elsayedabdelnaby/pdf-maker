@@ -50,13 +50,16 @@ class PaymentPlan extends Model
         );
     }
 
-    public function checksCF()
-    {
-        return $this->hasMany(CheckCF::class, 'cf_1755', 'paymentplansid');
-    }
-
     public function crmEntity()
     {
         return $this->belongsTo(CRMEntity::class, 'paymentplansid', 'crmid');
+    }
+
+    public function checksCF()
+    {
+        return $this->hasMany(CheckCF::class, 'cf_1755', 'paymentplansid')
+            ->whereHas('crmEntity', function ($query) {
+                $query->where('deleted', 0);
+            });
     }
 }
