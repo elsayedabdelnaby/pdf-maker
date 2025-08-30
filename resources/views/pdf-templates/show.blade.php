@@ -86,7 +86,11 @@
                                         </div>
                                         
                                         <button type="submit" class="btn btn-success btn-block">
-                                            <i class="fas fa-file-pdf"></i> Generate PDF
+                                            <i class="fas fa-file-pdf"></i> Generate PDF (New Method)
+                                        </button>
+                                        
+                                        <button type="button" class="btn btn-info btn-block mt-2" onclick="testOldMethod()">
+                                            <i class="fas fa-file-pdf"></i> Test Old Method (WKHTMLTOPDF)
                                         </button>
                                     </form>
                                     
@@ -103,12 +107,26 @@
                                                 return;
                                             }
                                             
-                                            // Construct the URL based on the route structure
-                                            const url = `/generate-pdf/${templateId}/${modelType}/${modelId}`;
+                                            // Use the new export route for better reliability
+                                            const url = `/export-pdf/${templateId}/invoice/${modelId}`;
                                             
                                             // Open in new tab
                                             window.open(url, '_blank');
                                         });
+                                        
+                                        function testOldMethod() {
+                                            const templateId = {{ $pdfTemplate->id }};
+                                            const modelId = document.getElementById('model_id').value;
+                                            
+                                            if (!modelId) {
+                                                alert('Please enter a Model ID');
+                                                return;
+                                            }
+                                            
+                                            // Use the old WKHTMLTOPDF method
+                                            const url = `/generate-pdf/${templateId}/invoice/${modelId}`;
+                                            window.open(url, '_blank');
+                                        }
                                     </script>
                                 </div>
                             </div>
@@ -163,6 +181,8 @@
                                                     <ul class="list-unstyled small">
                                                         <li><code>@{{model_type}}</code> - Model type</li>
                                                         <li><code>@{{model_id}}</code> - Invoice ID</li>
+                                                        <li><code>@{{page_number}}</code> - Current page number</li>
+                                                        <li><code>@{{total_pages}}</code> - Total pages</li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -247,6 +267,14 @@
                                         
                                         <div class="alert alert-info">
                                             <strong>Tip:</strong> Use these placeholders in your template content. They will be automatically replaced with actual invoice data when generating PDFs.
+                                        </div>
+                                        
+                                        <div class="alert alert-success">
+                                            <strong>Page Numbering:</strong> Page numbers are automatically added to every page in the format "Page X of Y" using WKHTMLTOPDF's native footer support. You can also use <code>&lt;div class="page-break"&gt;&lt;/div&gt;</code> to force new pages.
+                                        </div>
+                                        
+                                        <div class="alert alert-warning">
+                                            <strong>Footer on All Pages:</strong> Your footer content will automatically appear on every page using WKHTMLTOPDF's native footer support. Use the footer field to add content that should appear on all pages (company information, contact details, terms & conditions).
                                         </div>
                                         
                                         <small class="text-muted">Note: Currently supporting Invoice model only. Enter the Invoice ID to generate PDF. Use these placeholders in your template content.</small>

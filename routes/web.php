@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\PdfTemplateController;
+use App\Http\Controllers\PdfExportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,4 +56,12 @@ Route::get('debug-pdf/{templateId}/invoice/{modelId}', [PdfTemplateController::c
 // Test WKHTMLTOPDF installation
 Route::get('test-wkhtmltopdf', [PdfTemplateController::class, 'testWkhtmltopdf'])
     ->name('test-wkhtmltopdf');
+
+// New PDF Export Routes (using pure PHP approach)
+Route::get('export-pdf/{templateId}/invoice/{modelId}', [PdfExportController::class, 'generatePdf'])
+    ->name('export-pdf');
+
+// Debug route for new PDF export
+Route::get('debug-export/{templateId}/invoice/{modelId}', [PdfExportController::class, 'debugPdf'])
+    ->name('debug-export');
 

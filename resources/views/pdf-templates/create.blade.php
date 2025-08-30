@@ -211,12 +211,14 @@
                                                      <li><code>@{{status}}</code> - Invoice status</li>
                                                  </ul>
                                              </div>
-                                             <div class="col-md-6">
-                                                 <ul class="list-unstyled small">
-                                                     <li><code>@{{model_type}}</code> - Model type</li>
-                                                     <li><code>@{{model_id}}</code> - Invoice ID</li>
-                                                 </ul>
-                                             </div>
+                                                                                         <div class="col-md-6">
+                                                <ul class="list-unstyled small">
+                                                    <li><code>@{{model_type}}</code> - Model type</li>
+                                                    <li><code>@{{model_id}}</code> - Invoice ID</li>
+                                                    <li><code>@{{page_number}}</code> - Current page number</li>
+                                                    <li><code>@{{total_pages}}</code> - Total pages</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </div>
                                     
@@ -309,6 +311,22 @@
                                         <code>&lt;p&gt;Project: @{{project_name}} - @{{project_location}}&lt;/p&gt;</code><br>
                                         <code>&lt;p&gt;Unit: @{{unit_number}} (@{{unit_area}} m²)&lt;/p&gt;</code>
                                     </div>
+                                    
+                                    <div class="alert alert-info">
+                                        <strong>Page Numbering & Page Breaks:</strong><br>
+                                        • Page numbers are automatically added to every page using WKHTMLTOPDF's native footer support<br>
+                                        • Use <code>&lt;div class="page-break"&gt;&lt;/div&gt;</code> to force a new page<br>
+                                        • Use <code>&lt;div class="no-break"&gt;&lt;/div&gt;</code> to prevent content from breaking across pages<br>
+                                        • Page numbers will appear as "Page X of Y" at the bottom of each page<br>
+                                        • <strong>Tip:</strong> In TinyMCE, use the "Page Break" button (📄) in the toolbar to insert page breaks
+                                    </div>
+                                    
+                                    <div class="alert alert-warning">
+                                        <strong>Footer on All Pages:</strong><br>
+                                        • Your footer content will automatically appear on every page using WKHTMLTOPDF's native footer support<br>
+                                        • Use the footer field below to add content that should appear on all pages<br>
+                                        • Common uses: company information, contact details, terms & conditions
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -354,14 +372,14 @@
     tinymce.init({
         selector: '#body_html',
         height: 400,
-        plugins: 'advlist anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality',
-        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality',
+        plugins: 'advlist anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality pagebreak',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality | pagebreak custompagebreak',
         directionality: document.getElementById('rtl').checked ? 'rtl' : 'ltr',
         language: 'en',
         menubar: false,
         branding: false,
         promotion: false,
-        content_style: 'body { font-family: Arial, Tahoma, sans-serif; }',
+        content_style: 'body { font-family: Arial, Tahoma, sans-serif; } .page-break { page-break-before: always; margin-top: 20px; border-top: 2px dashed #ccc; padding-top: 10px; } .no-break { page-break-inside: avoid; } @media print { .page-break { border: none; background: none; padding: 0; margin: 0; height: 0; overflow: hidden; } }',
         setup: function(editor) {
             // Hide the original textarea after TinyMCE is initialized
             editor.on('init', function() {
@@ -382,6 +400,15 @@
             document.querySelector('form').addEventListener('submit', function() {
                 editor.save(); // Save content to hidden textarea before submit
             });
+            
+            // Add custom page break button
+            editor.ui.registry.addButton('custompagebreak', {
+                text: '📄 Page Break',
+                tooltip: 'Insert Page Break',
+                onAction: function() {
+                    editor.insertContent('<div class="page-break" style="page-break-before: always; margin-top: 20px; border-top: 2px dashed #ccc; padding-top: 10px; text-align: center; color: #666; font-size: 12px;">&nbsp;</div>');
+                }
+            });
         }
     });
 
@@ -389,8 +416,8 @@
     tinymce.init({
         selector: '#header_html',
         height: 200,
-        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality',
-        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality',
+        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality pagebreak',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality | pagebreak',
         directionality: document.getElementById('rtl').checked ? 'rtl' : 'ltr',
         language: 'en',
         menubar: false,
@@ -408,8 +435,8 @@
     tinymce.init({
         selector: '#footer_html',
         height: 200,
-        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality',
-        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality',
+        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount directionality pagebreak',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat | ltr rtl directionality | pagebreak',
         directionality: document.getElementById('rtl').checked ? 'rtl' : 'ltr',
         language: 'en',
         menubar: false,

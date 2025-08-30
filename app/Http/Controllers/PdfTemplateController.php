@@ -153,6 +153,12 @@ class PdfTemplateController extends Controller
             file_put_contents($tempHtmlFile, $html);
             Log::info('HTML saved to temp file: ' . $tempHtmlFile);
             
+            // Create footer HTML file with page numbering
+            $footerHtml = $this->generateFooterHtml($template);
+            $tempFooterFile = tempnam(sys_get_temp_dir(), 'pdf_footer_') . '.html';
+            file_put_contents($tempFooterFile, $footerHtml);
+            Log::info('Footer HTML saved to temp file: ' . $tempFooterFile);
+            
             // Build WKHTMLTOPDF command with proper Windows quoting
             $command = '"' . $binaryPath . '"';
             $command .= ' --page-size "' . $template->page_size . '"';
@@ -165,14 +171,18 @@ class PdfTemplateController extends Controller
             $command .= ' --enable-local-file-access';
             $command .= ' --no-outline';
             $command .= ' --quiet';
+            $command .= ' --enable-javascript';
             $command .= ' --javascript-delay "1000"';
             $command .= ' --no-stop-slow-scripts';
             $command .= ' --disable-smart-shrinking';
             $command .= ' --print-media-type';
             $command .= ' --dpi "96"';
-            $command .= ' --encoding "UTF-8"';
-            $command .= ' --javascript-delay "2000"';
-            $command .= ' --no-stop-slow-scripts';
+            
+            // Add footer HTML for page numbering
+            $command .= ' --footer-html "' . $tempFooterFile . '"';
+            $command .= ' --footer-spacing "5"';
+            // Also try footer-center for page numbering as a fallback
+            $command .= ' --footer-center "Page [page] of [topage]"';
             
             // Note: WKHTMLTOPDF doesn't support --direction, RTL is handled via CSS
             
@@ -195,6 +205,7 @@ class PdfTemplateController extends Controller
                 // Clean up temp files
                 unlink($tempHtmlFile);
                 unlink($tempPdfFile);
+                unlink($tempFooterFile);
                 
                 $filename = 'invoice_' . $modelId . '_' . date('Y-m-d_H-i-s') . '.pdf';
                 
@@ -209,6 +220,7 @@ class PdfTemplateController extends Controller
                 // Clean up temp files
                 if (file_exists($tempHtmlFile)) unlink($tempHtmlFile);
                 if (file_exists($tempPdfFile)) unlink($tempPdfFile);
+                if (file_exists($tempFooterFile)) unlink($tempFooterFile);
                 
                 try {
                     // Fallback to Laravel Snappy
@@ -504,9 +516,8 @@ class PdfTemplateController extends Controller
         
         $fullHtml .= '<div class="content">' . $html . '</div>';
         
-        if ($template->footer_html) {
-            $fullHtml .= '<div class="footer">' . $template->footer_html . '</div>';
-        }
+        // Footer will be handled by WKHTMLTOPDF's --footer-html option
+        // No need to include it in the main HTML
         
         $fullHtml .= '</body></html>';
         
@@ -514,6 +525,49 @@ class PdfTemplateController extends Controller
         Log::info('Generated HTML length: ' . strlen($fullHtml));
         
         return $fullHtml;
+    }
+
+        private function generateFooterHtml($template)
+    {
+        $direction = $template->rtl ? 'rtl' : 'ltr';
+        $textAlign = $template->rtl ? 'right' : 'left';
+        
+        $footerHtml = '<!DOCTYPE html>
+    <html dir="' . $direction . '">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { 
+                margin: 0; 
+                padding: 5px 20px; 
+                font-family: Arial, sans-serif; 
+                font-size: 10px; 
+                color: #666;
+                direction: ' . $direction . ';
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>';
+        
+        // Add template footer content if it exists
+        if ($template->footer_html) {
+            $footerHtml .= '<div style="margin-bottom: 5px;">' . $template->footer_html . '</div>';
+        }
+        
+        // Add page numbering using WKHTMLTOPDF's native variables
+        // Try multiple syntax options for better compatibility
+        $footerHtml .= '<div>Page [page] of [topage]</div>';
+        $footerHtml .= '<div style="display:none;">Alternative: Page <span class="page"></span> of <span class="topage"></span></div>';
+        $footerHtml .= '<div style="display:none;">Alternative 2: Page [page] of [topage]</div>';
+        $footerHtml .= '<div style="display:none;">Alternative 3: Page [page] of [topage]</div>';
+        
+        $footerHtml .= '</body></html>';
+        
+        // Log the generated footer HTML for debugging
+        Log::info('Generated footer HTML: ' . $footerHtml);
+        
+        return $footerHtml;
     }
 
     private function formatDate($date)
@@ -608,6 +662,42 @@ class PdfTemplateController extends Controller
                 direction: ltr;
                 text-align: left;
             }
+            /* Page break support */
+            .page-break {
+                page-break-before: always;
+                break-before: page;
+                margin-top: 20px;
+                clear: both;
+            }
+            .page-break-after {
+                page-break-after: always;
+                break-after: page;
+                margin-bottom: 20px;
+            }
+            /* Ensure content doesn't break awkwardly */
+            .no-break {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            /* Force page breaks for specific elements */
+            .force-page-break {
+                page-break-before: always;
+                break-before: page;
+            }
+            /* Hide page break visual elements in PDF */
+            @media print {
+                .page-break {
+                    border: none !important;
+                    background: none !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    height: 0 !important;
+                    overflow: hidden !important;
+                    color: transparent !important;
+                }
+            }
         ";
     }
+    
+
 }
