@@ -92,6 +92,50 @@
                                         <button type="button" class="btn btn-info btn-block mt-2" onclick="testOldMethod()">
                                             <i class="fas fa-file-pdf"></i> Test Old Method (WKHTMLTOPDF)
                                         </button>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6 class="text-primary">DomPDF Generation Options:</h6>
+                                        
+                                        <button type="button" class="btn btn-success btn-block mt-2" onclick="generateDomPdf()">
+                                            <i class="fas fa-file-pdf"></i> Generate PDF with DomPDF (Download)
+                                        </button>
+                                        
+                                        <button type="button" class="btn btn-warning btn-block mt-2" onclick="generateDomPdfInline()">
+                                            <i class="fas fa-eye"></i> Preview PDF with DomPDF (Inline)
+                                        </button>
+                                        
+                                        <button type="button" class="btn btn-secondary btn-block mt-2" onclick="debugDomPdf()">
+                                            <i class="fas fa-bug"></i> Debug DomPDF Generation
+                                        </button>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6 class="text-info">Custom Page Numbering:</h6>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <select class="form-control mb-2" id="pageNumberingPosition">
+                                                    <option value="bottom">Bottom</option>
+                                                    <option value="top">Top</option>
+                                                    <option value="header">Below Header</option>
+                                                    <option value="footer">Above Footer</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <select class="form-control mb-2" id="pageNumberingStyle">
+                                                    <option value="centered">Centered</option>
+                                                    <option value="left">Left Aligned</option>
+                                                    <option value="right">Right Aligned</option>
+                                                    <option value="simple">Simple Number</option>
+                                                    <option value="default">Default</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <button type="button" class="btn btn-info btn-block mt-2" onclick="generateCustomDomPdf()">
+                                            <i class="fas fa-cog"></i> Generate with Custom Page Numbering
+                                        </button>
                                     </form>
                                     
                                     <script>
@@ -125,6 +169,64 @@
                                             
                                             // Use the old WKHTMLTOPDF method
                                             const url = `/generate-pdf/${templateId}/invoice/${modelId}`;
+                                            window.open(url, '_blank');
+                                        }
+                                        
+                                        function generateDomPdf() {
+                                            const templateId = {{ $pdfTemplate->id }};
+                                            const modelId = document.getElementById('model_id').value;
+                                            
+                                            if (!modelId) {
+                                                alert('Please enter a Model ID');
+                                                return;
+                                            }
+                                            
+                                            // Use DomPDF for PDF generation
+                                            const url = `/dompdf/${templateId}/invoice/${modelId}`;
+                                            window.open(url, '_blank');
+                                        }
+                                        
+                                        function generateDomPdfInline() {
+                                            const templateId = {{ $pdfTemplate->id }};
+                                            const modelId = document.getElementById('model_id').value;
+                                            
+                                            if (!modelId) {
+                                                alert('Please enter a Model ID');
+                                                return;
+                                            }
+                                            
+                                            // Use DomPDF for inline PDF preview
+                                            const url = `/dompdf-inline/${templateId}/invoice/${modelId}`;
+                                            window.open(url, '_blank');
+                                        }
+                                        
+                                        function debugDomPdf() {
+                                            const templateId = {{ $pdfTemplate->id }};
+                                            const modelId = document.getElementById('model_id').value;
+                                            
+                                            if (!modelId) {
+                                                alert('Please enter a Model ID');
+                                                return;
+                                            }
+                                            
+                                            // Debug DomPDF generation
+                                            const url = `/debug-dompdf/${templateId}/invoice/${modelId}`;
+                                            window.open(url, '_blank');
+                                        }
+                                        
+                                        function generateCustomDomPdf() {
+                                            const templateId = {{ $pdfTemplate->id }};
+                                            const modelId = document.getElementById('model_id').value;
+                                            const position = document.getElementById('pageNumberingPosition').value;
+                                            const style = document.getElementById('pageNumberingStyle').value;
+                                            
+                                            if (!modelId) {
+                                                alert('Please enter a Model ID');
+                                                return;
+                                            }
+                                            
+                                            // Generate PDF with custom page numbering
+                                            const url = `/dompdf-custom/${templateId}/invoice/${modelId}/${position}/${style}`;
                                             window.open(url, '_blank');
                                         }
                                     </script>
