@@ -12,6 +12,7 @@ class Invoice extends Model
     protected $table = 'vtiger_invoice';
 
     protected $fillable = [
+        'invoiceid',
         'subject', // Subject
         'contract_number', // Contract Number
         'salesorderid', // Sales Order

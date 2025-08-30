@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\PdfTemplateController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,4 +42,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [HomeController::class, 'index'])->name('dashboard');
     Route::get('/home', [HomeController::class, 'index'])->name('home');
 });
+
+// PDF Template Routes
+Route::resource('pdf-templates', PdfTemplateController::class);
+Route::get('generate-pdf/{templateId}/invoice/{modelId}', [PdfTemplateController::class, 'generatePdf'])
+    ->name('generate-pdf');
+
+// Debug route for PDF generation
+Route::get('debug-pdf/{templateId}/invoice/{modelId}', [PdfTemplateController::class, 'debugPdf'])
+    ->name('debug-pdf');
+
+// Test WKHTMLTOPDF installation
+Route::get('test-wkhtmltopdf', [PdfTemplateController::class, 'testWkhtmltopdf'])
+    ->name('test-wkhtmltopdf');
 
