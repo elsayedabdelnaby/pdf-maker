@@ -8,17 +8,25 @@ use App\Models\Company;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PdfExportController extends Controller
 {
     /**
-     * Generate PDF using pure PHP approach
+     * Generate PDF using DomPDF
      */
     public function generatePdf(Request $request, $templateId, $modelId)
     {
         try {
             $template = PdfTemplate::findOrFail($templateId);
-            $invoice = Invoice::where('invoiceid', $modelId)->first();
+            $invoice = Invoice::with([
+                'invoiceCF',
+                'contact',
+                'contactCF',
+                'paymentPlan',
+                'paymentPlanCF',
+                'paymentPlan.checksCF.crmEntity'
+            ])->where('invoiceid', $modelId)->first();
             
             if (!$invoice) {
                 return response()->json(['error' => 'Invoice not found'], 404);
@@ -31,20 +39,24 @@ class PdfExportController extends Controller
                 return response()->json(['error' => 'HTML content is empty'], 500);
             }
 
-            // Generate PDF using pure PHP approach
-            $pdfContent = $this->generatePdfFromHtml($html, $template);
+            // Configure DomPDF options
+            $pdf = Pdf::loadHTML($html);
             
-            if (empty($pdfContent)) {
-                return response()->json(['error' => 'PDF generation failed'], 500);
-            }
+            // Set paper size and orientation
+            $pdf->setPaper($template->page_size, strtolower($template->orientation));
+            
+            // Set options
+            $pdf->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isPhpEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $template->rtl ? 'DejaVu Sans' : 'Arial',
+                'dpi' => 96,
+            ]);
 
             $filename = 'invoice_' . $modelId . '_' . date('Y-m-d_H-i-s') . '.pdf';
             
-            return Response::make($pdfContent, 200, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                'Content-Length' => strlen($pdfContent)
-            ]);
+            return $pdf->download($filename);
             
         } catch (\Exception $e) {
             Log::error('PDF generation failed: ' . $e->getMessage());
@@ -62,7 +74,14 @@ class PdfExportController extends Controller
     {
         try {
             $template = PdfTemplate::findOrFail($templateId);
-            $invoice = Invoice::where('invoiceid', $modelId)->first();
+            $invoice = Invoice::with([
+                'invoiceCF',
+                'contact',
+                'contactCF',
+                'paymentPlan',
+                'paymentPlanCF',
+                'paymentPlan.checksCF.crmEntity'
+            ])->where('invoiceid', $modelId)->first();
             
             if (!$invoice) {
                 return response()->json(['error' => 'Invoice not found'], 404);
@@ -74,6 +93,24 @@ class PdfExportController extends Controller
             // Get company info safely
             $company = Company::where('organization_id', 1)->first();
             $companyName = $company ? $company->organizationname : 'Not found';
+            
+            // Get checks data
+            $checksData = [];
+            if ($invoice->paymentPlan && $invoice->paymentPlan->checksCF) {
+                $checksData = $invoice->paymentPlan->checksCF->where('crmEntity.deleted', 0)->map(function($check) {
+                    return [
+                        'id' => $check->checksid,
+                        'bank_name' => $check->cf_1723 ?? '',
+                        'check_number' => $check->cf_1711 ?? '',
+                        'amount' => $check->cf_1721 ?? '',
+                        'collection_date' => $check->cf_1703 ?? '',
+                        'status' => $check->cf_1713 ?? '',
+                        'note' => $check->cf_1715 ?? '',
+                        'customer_name' => $check->cf_1717 ?? '',
+                        'unit_number' => $check->cf_1719 ?? '',
+                    ];
+                })->toArray();
+            }
             
             // Return debug information
             return response()->json([
@@ -97,14 +134,18 @@ class PdfExportController extends Controller
                     'id' => $invoice->invoiceid ? $invoice->invoiceid : $invoice->id,
                     'invoice_no' => $invoice->invoice_no ? $invoice->invoice_no : '',
                     'total' => $invoice->total ? $invoice->total : '',
-                    'invoicedate' => $invoice->invoicedate ? $invoice->invoicedate : ''
+                    'invoicedate' => $invoice->invoicedate ? $invoice->invoicedate : '',
+                    'customer' => $invoice->contact ? $invoice->contact->lastname : 'No customer',
+                    'payment_plan_id' => $invoice->paymentPlan ? $invoice->paymentPlan->paymentplansid : 'No payment plan'
                 ],
+                'checks_count' => count($checksData),
+                'checks_data' => $checksData,
                 'generated_html' => [
                     'length' => strlen($html),
                     'preview' => substr($html, 0, 500) . '...'
                 ],
                 'company' => $companyName,
-                'method' => 'New Export Controller (Pure PHP + Snappy Fallback)'
+                'method' => 'DomPDF Export Controller'
             ]);
             
         } catch (\Exception $e) {
@@ -127,37 +168,151 @@ class PdfExportController extends Controller
         // Get invoice custom fields
         $invoiceCF = $invoice->invoiceCF;
         
+        // Get contact information
+        $contact = $invoice->contact;
+        $contactCF = $invoice->contactCF;
+        
+        // Get payment plan information
+        $paymentPlan = $invoice->paymentPlan;
+        $paymentPlanCF = $invoice->paymentPlanCF;
+        
+        // Get checks information
+        $checks = collect([]);
+        if ($paymentPlan && $paymentPlan->checksCF) {
+            $checks = $paymentPlan->checksCF->where('crmEntity.deleted', 0);
+        }
+        
         // Replace placeholders
         $replacements = [
-            // Basic Invoice Fields
+            // Basic Invoice Fields (with and without spaces)
             '{{company_name}}' => $company ? $company->organizationname : 'Company Name',
+            '{{ company_name }}' => $company ? $company->organizationname : 'Company Name',
             '{{invoice_number}}' => $invoice->invoice_no ? $invoice->invoice_no : ($invoice->invoiceid ? $invoice->invoiceid : ''),
+            '{{ invoice_number }}' => $invoice->invoice_no ? $invoice->invoice_no : ($invoice->invoiceid ? $invoice->invoiceid : ''),
             '{{date}}' => $this->formatDate($invoice->invoicedate),
+            '{{ date }}' => $this->formatDate($invoice->invoicedate),
             '{{amount}}' => $invoice->total ? $invoice->total : '0.00',
-            '{{customer_name}}' => $invoice->contact ? $invoice->contact->lastname : 'Customer',
+            '{{ amount }}' => $invoice->total ? $invoice->total : '0.00',
+            '{{customer_name}}' => $contact ? $contact->lastname : 'Customer',
+            '{{ customer_name }}' => $contact ? $contact->lastname : 'Customer',
             '{{model_type}}' => 'Invoice',
+            '{{ model_type }}' => 'Invoice',
             '{{model_id}}' => $invoice->invoiceid ? $invoice->invoiceid : $invoice->id,
+            '{{ model_id }}' => $invoice->invoiceid ? $invoice->invoiceid : $invoice->id,
             
             // Additional Invoice Fields
             '{{subject}}' => $invoice->subject ?: '',
+            '{{ subject }}' => $invoice->subject ?: '',
             '{{contract_number}}' => $invoice->contract_number ?: '',
+            '{{ contract_number }}' => $invoice->contract_number ?: '',
             '{{sales_order}}' => $invoice->salesorderid ?: '',
+            '{{ sales_order }}' => $invoice->salesorderid ?: '',
             '{{customer_no}}' => $invoice->customerno ?: '',
+            '{{ customer_no }}' => $invoice->customerno ?: '',
             '{{due_date}}' => $this->formatDate($invoice->duedate),
+            '{{ due_date }}' => $this->formatDate($invoice->duedate),
             '{{purchase_order}}' => $invoice->purchaseorder ?: '',
+            '{{ purchase_order }}' => $invoice->purchaseorder ?: '',
             '{{subtotal}}' => $invoice->subtotal ?: '0.00',
+            '{{ subtotal }}' => $invoice->subtotal ?: '0.00',
             '{{pre_tax_total}}' => $invoice->pre_tax_total ?: '0.00',
+            '{{ pre_tax_total }}' => $invoice->pre_tax_total ?: '0.00',
             '{{tax_type}}' => $invoice->taxtype ?: '',
+            '{{ tax_type }}' => $invoice->taxtype ?: '',
             '{{discount_percent}}' => $invoice->discount_percent ?: '0',
+            '{{ discount_percent }}' => $invoice->discount_percent ?: '0',
             '{{discount_amount}}' => $invoice->discount_amount ?: '0.00',
+            '{{ discount_amount }}' => $invoice->discount_amount ?: '0.00',
             '{{shipping_amount}}' => $invoice->s_h_amount ?: '0.00',
+            '{{ shipping_amount }}' => $invoice->s_h_amount ?: '0.00',
             '{{shipping_percent}}' => $invoice->s_h_percent ?: '0',
+            '{{ shipping_percent }}' => $invoice->s_h_percent ?: '0',
             '{{received}}' => $invoice->received ?: '0.00',
+            '{{ received }}' => $invoice->received ?: '0.00',
             '{{balance}}' => $invoice->balance ?: '0.00',
+            '{{ balance }}' => $invoice->balance ?: '0.00',
             '{{currency}}' => $invoice->currency_id ?: '',
+            '{{ currency }}' => $invoice->currency_id ?: '',
             '{{conversion_rate}}' => $invoice->conversion_rate ?: '1.00',
+            '{{ conversion_rate }}' => $invoice->conversion_rate ?: '1.00',
             '{{terms_conditions}}' => $invoice->terms_conditions ?: '',
-            '{{status}}' => $invoice->invoicedestatus ?: '',
+            '{{ terms_conditions }}' => $invoice->terms_conditions ?: '',
+            '{{status}}' => $invoice->invoicestatus ?: '',
+            '{{ status }}' => $invoice->invoicestatus ?: '',
+            
+            // Contact Fields
+            '{{customer_first_name}}' => $contact ? $contact->firstname : '',
+            '{{customer_phone}}' => $contact ? $contact->phone : '',
+            '{{customer_mobile}}' => $contact ? $contact->mobile : '',
+            '{{customer_email}}' => $contact ? $contact->email : '',
+            '{{customer_title}}' => $contact ? $contact->title : '',
+            '{{customer_department}}' => $contact ? $contact->department : '',
+            '{{customer_fax}}' => $contact ? $contact->fax : '',
+            '{{customer_secondary_email}}' => $contact ? $contact->secondaryemail : '',
+            
+            // Contact Custom Fields
+            '{{customer_national_id}}' => $contactCF && $contactCF->cf_1282 ?: '',
+            '{{ customer_national_id }}' => $contactCF && $contactCF->cf_1282 ?: '',
+            '{{customer_type}}' => $contactCF && $contactCF->cf_1284 ?: '',
+            '{{ customer_type }}' => $contactCF && $contactCF->cf_1284 ?: '',
+            '{{customer_work_field}}' => $contactCF && $contactCF->cf_1393 ?: '',
+            '{{ customer_work_field }}' => $contactCF && $contactCF->cf_1393 ?: '',
+            '{{customer_amount_paid}}' => $contactCF && $contactCF->cf_1395 ?: '',
+            '{{ customer_amount_paid }}' => $contactCF && $contactCF->cf_1395 ?: '',
+            '{{customer_name_arabic}}' => $contactCF && $contactCF->cf_1679 ?: '',
+            '{{ customer_name_arabic }}' => $contactCF && $contactCF->cf_1679 ?: '',
+            '{{customer_first_degree_name}}' => $contactCF && $contactCF->cf_1681 ?: '',
+            '{{ customer_first_degree_name }}' => $contactCF && $contactCF->cf_1681 ?: '',
+            '{{customer_first_degree_relation}}' => $contactCF && $contactCF->cf_1683 ?: '',
+            '{{ customer_first_degree_relation }}' => $contactCF && $contactCF->cf_1683 ?: '',
+            '{{customer_first_degree_cellphone}}' => $contactCF && $contactCF->cf_1685 ?: '',
+            '{{ customer_first_degree_cellphone }}' => $contactCF && $contactCF->cf_1685 ?: '',
+            '{{customer_first_degree_email}}' => $contactCF && $contactCF->cf_1687 ?: '',
+            '{{ customer_first_degree_email }}' => $contactCF && $contactCF->cf_1687 ?: '',
+            '{{customer_employment_name}}' => $contactCF && $contactCF->cf_1689 ?: '',
+            '{{ customer_employment_name }}' => $contactCF && $contactCF->cf_1689 ?: '',
+            
+            // Payment Plan Fields
+            '{{payment_plan_id}}' => $paymentPlan ? $paymentPlan->paymentplansid : '',
+            '{{ payment_plan_id }}' => $paymentPlan ? $paymentPlan->paymentplansid : '',
+            '{{payment_options}}' => $paymentPlanCF && $paymentPlanCF->cf_1731 ?: '',
+            '{{ payment_options }}' => $paymentPlanCF && $paymentPlanCF->cf_1731 ?: '',
+            '{{down_payment}}' => $paymentPlanCF && $paymentPlanCF->cf_1733 ?: '',
+            '{{ down_payment }}' => $paymentPlanCF && $paymentPlanCF->cf_1733 ?: '',
+            '{{payment_method}}' => $paymentPlanCF && $paymentPlanCF->cf_1735 ?: '',
+            '{{ payment_method }}' => $paymentPlanCF && $paymentPlanCF->cf_1735 ?: '',
+            '{{unit_area_plan}}' => $paymentPlanCF && $paymentPlanCF->cf_1741 ?: '',
+            '{{ unit_area_plan }}' => $paymentPlanCF && $paymentPlanCF->cf_1741 ?: '',
+            '{{meter_unit_price}}' => $paymentPlanCF && $paymentPlanCF->cf_1743 ?: '',
+            '{{ meter_unit_price }}' => $paymentPlanCF && $paymentPlanCF->cf_1743 ?: '',
+            '{{garden_area_plan}}' => $paymentPlanCF && $paymentPlanCF->cf_1745 ?: '',
+            '{{ garden_area_plan }}' => $paymentPlanCF && $paymentPlanCF->cf_1745 ?: '',
+            '{{garden_meter_price}}' => $paymentPlanCF && $paymentPlanCF->cf_1747 ?: '',
+            '{{ garden_meter_price }}' => $paymentPlanCF && $paymentPlanCF->cf_1747 ?: '',
+            '{{unit_price_plan}}' => $paymentPlanCF && $paymentPlanCF->cf_1749 ?: '',
+            '{{ unit_price_plan }}' => $paymentPlanCF && $paymentPlanCF->cf_1749 ?: '',
+            '{{quarterly}}' => $paymentPlanCF && $paymentPlanCF->cf_1761 ?: '',
+            '{{ quarterly }}' => $paymentPlanCF && $paymentPlanCF->cf_1761 ?: '',
+            '{{half_yearly}}' => $paymentPlanCF && $paymentPlanCF->cf_1763 ?: '',
+            '{{ half_yearly }}' => $paymentPlanCF && $paymentPlanCF->cf_1763 ?: '',
+            '{{annual}}' => $paymentPlanCF && $paymentPlanCF->cf_1765 ?: '',
+            '{{ annual }}' => $paymentPlanCF && $paymentPlanCF->cf_1765 ?: '',
+            '{{handover_payment}}' => $paymentPlanCF && $paymentPlanCF->cf_1767 ?: '',
+            '{{ handover_payment }}' => $paymentPlanCF && $paymentPlanCF->cf_1767 ?: '',
+            '{{year_of_handover_payment}}' => $paymentPlanCF && $paymentPlanCF->cf_1769 ?: '',
+            '{{ year_of_handover_payment }}' => $paymentPlanCF && $paymentPlanCF->cf_1769 ?: '',
+            '{{maintenance_fee}}' => $paymentPlanCF && $paymentPlanCF->cf_1775 ?: '',
+            '{{ maintenance_fee }}' => $paymentPlanCF && $paymentPlanCF->cf_1775 ?: '',
+            '{{maintenance_fee_value}}' => $paymentPlanCF && $paymentPlanCF->cf_1777 ?: '',
+            '{{ maintenance_fee_value }}' => $paymentPlanCF && $paymentPlanCF->cf_1777 ?: '',
+            '{{maintenance_fee_collection_year}}' => $paymentPlanCF && $paymentPlanCF->cf_1779 ?: '',
+            '{{ maintenance_fee_collection_year }}' => $paymentPlanCF && $paymentPlanCF->cf_1779 ?: '',
+            '{{handover_payment_value}}' => $paymentPlanCF && $paymentPlanCF->cf_1783 ?: '',
+            '{{ handover_payment_value }}' => $paymentPlanCF && $paymentPlanCF->cf_1783 ?: '',
+            '{{first_installment_date}}' => $paymentPlanCF && $paymentPlanCF->cf_1785 ? $this->formatDate($paymentPlanCF->cf_1785) : '',
+            '{{ first_installment_date }}' => $paymentPlanCF && $paymentPlanCF->cf_1785 ? $this->formatDate($paymentPlanCF->cf_1785) : '',
+            '{{down_payment_percent}}' => $paymentPlanCF && $paymentPlanCF->cf_1787 ?: '',
+            '{{ down_payment_percent }}' => $paymentPlanCF && $paymentPlanCF->cf_1787 ?: '',
             
             // Invoice Custom Fields (CF)
             '{{check_date}}' => $invoiceCF && $invoiceCF->cf_1183 ? $this->formatDate($invoiceCF->cf_1183) : '',
@@ -175,78 +330,134 @@ class PdfExportController extends Controller
             '{{company_percent}}' => $invoiceCF && $invoiceCF->cf_1209 ?: '',
             '{{unit_total_price}}' => $invoiceCF && $invoiceCF->cf_1211 ?: '',
             '{{unit_area}}' => $invoiceCF && $invoiceCF->cf_1213 ?: '',
+            '{{ unit_area }}' => $invoiceCF && $invoiceCF->cf_1213 ?: '',
             '{{floors_count}}' => $invoiceCF && $invoiceCF->cf_1215 ?: '',
+            '{{ floors_count }}' => $invoiceCF && $invoiceCF->cf_1215 ?: '',
             '{{incentive_percent}}' => $invoiceCF && $invoiceCF->cf_1217 ?: '',
+            '{{ incentive_percent }}' => $invoiceCF && $invoiceCF->cf_1217 ?: '',
             '{{unit_number}}' => $invoiceCF && $invoiceCF->cf_1219 ?: '',
+            '{{ unit_number }}' => $invoiceCF && $invoiceCF->cf_1219 ?: '',
             '{{advance_payment}}' => $invoiceCF && $invoiceCF->cf_1221 ?: '',
+            '{{ advance_payment }}' => $invoiceCF && $invoiceCF->cf_1221 ?: '',
             '{{incentive_claim_date}}' => $invoiceCF && $invoiceCF->cf_1223 ? $this->formatDate($invoiceCF->cf_1223) : '',
+            '{{ incentive_claim_date }}' => $invoiceCF && $invoiceCF->cf_1223 ? $this->formatDate($invoiceCF->cf_1223) : '',
             '{{incentive_man_percent}}' => $invoiceCF && $invoiceCF->cf_1225 ?: '',
+            '{{ incentive_man_percent }}' => $invoiceCF && $invoiceCF->cf_1225 ?: '',
             '{{manager_id}}' => $invoiceCF && $invoiceCF->cf_1227 ?: '',
+            '{{ manager_id }}' => $invoiceCF && $invoiceCF->cf_1227 ?: '',
             '{{manager_name}}' => $invoiceCF && $invoiceCF->cf_1229 ?: '',
+            '{{ manager_name }}' => $invoiceCF && $invoiceCF->cf_1229 ?: '',
             '{{client_name}}' => $invoiceCF && $invoiceCF->cf_1231 ?: '',
+            '{{ client_name }}' => $invoiceCF && $invoiceCF->cf_1231 ?: '',
             '{{eight_years}}' => $invoiceCF && $invoiceCF->cf_1233 ?: '',
+            '{{ eight_years }}' => $invoiceCF && $invoiceCF->cf_1233 ?: '',
             '{{incentive_man_claim_date}}' => $invoiceCF && $invoiceCF->cf_1235 ? $this->formatDate($invoiceCF->cf_1235) : '',
+            '{{ incentive_man_claim_date }}' => $invoiceCF && $invoiceCF->cf_1235 ? $this->formatDate($invoiceCF->cf_1235) : '',
             '{{ten_years}}' => $invoiceCF && $invoiceCF->cf_1237 ?: '',
+            '{{ ten_years }}' => $invoiceCF && $invoiceCF->cf_1237 ?: '',
             '{{sixteen_years_20}}' => $invoiceCF && $invoiceCF->cf_1239 ?: '',
+            '{{ sixteen_years_20 }}' => $invoiceCF && $invoiceCF->cf_1239 ?: '',
             '{{sixteen_years_10}}' => $invoiceCF && $invoiceCF->cf_1241 ?: '',
+            '{{ sixteen_years_10 }}' => $invoiceCF && $invoiceCF->cf_1241 ?: '',
             '{{sixteen_years_15}}' => $invoiceCF && $invoiceCF->cf_1243 ?: '',
+            '{{ sixteen_years_15 }}' => $invoiceCF && $invoiceCF->cf_1243 ?: '',
             '{{twelve_years}}' => $invoiceCF && $invoiceCF->cf_1245 ?: '',
+            '{{ twelve_years }}' => $invoiceCF && $invoiceCF->cf_1245 ?: '',
             '{{net_value}}' => $invoiceCF && $invoiceCF->cf_1247 ?: '',
+            '{{ net_value }}' => $invoiceCF && $invoiceCF->cf_1247 ?: '',
             '{{delivery_month}}' => $invoiceCF && $invoiceCF->cf_1249 ?: '',
+            '{{ delivery_month }}' => $invoiceCF && $invoiceCF->cf_1249 ?: '',
             '{{eighty_eight_percent}}' => $invoiceCF && $invoiceCF->cf_1379 ?: '',
+            '{{ eighty_eight_percent }}' => $invoiceCF && $invoiceCF->cf_1379 ?: '',
             '{{garden}}' => $invoiceCF && $invoiceCF->cf_1537 ?: '',
+            '{{ garden }}' => $invoiceCF && $invoiceCF->cf_1537 ?: '',
             '{{building_no}}' => $invoiceCF && $invoiceCF->cf_1539 ?: '',
+            '{{ building_no }}' => $invoiceCF && $invoiceCF->cf_1539 ?: '',
             '{{unit_price_in_words}}' => $invoiceCF && $invoiceCF->cf_1541 ?: '',
+            '{{ unit_price_in_words }}' => $invoiceCF && $invoiceCF->cf_1541 ?: '',
             '{{remaining_balance}}' => $invoiceCF && $invoiceCF->cf_1543 ?: '',
+            '{{ remaining_balance }}' => $invoiceCF && $invoiceCF->cf_1543 ?: '',
             '{{remaining_balance_amount}}' => $invoiceCF && $invoiceCF->cf_1545 ?: '',
+            '{{ remaining_balance_amount }}' => $invoiceCF && $invoiceCF->cf_1545 ?: '',
             '{{reservation_payment}}' => $invoiceCF && $invoiceCF->cf_1547 ?: '',
+            '{{ reservation_payment }}' => $invoiceCF && $invoiceCF->cf_1547 ?: '',
             '{{reservation_payment_amount}}' => $invoiceCF && $invoiceCF->cf_1549 ?: '',
+            '{{ reservation_payment_amount }}' => $invoiceCF && $invoiceCF->cf_1549 ?: '',
             '{{payment_day}}' => $invoiceCF && $invoiceCF->cf_1551 ?: '',
+            '{{ payment_day }}' => $invoiceCF && $invoiceCF->cf_1551 ?: '',
             '{{payment_month}}' => $invoiceCF && $invoiceCF->cf_1553 ?: '',
+            '{{ payment_month }}' => $invoiceCF && $invoiceCF->cf_1553 ?: '',
             '{{maintenance_amount}}' => $invoiceCF && $invoiceCF->cf_1555 ?: '',
+            '{{ maintenance_amount }}' => $invoiceCF && $invoiceCF->cf_1555 ?: '',
             '{{maintenance_amount_value}}' => $invoiceCF && $invoiceCF->cf_1557 ?: '',
+            '{{ maintenance_amount_value }}' => $invoiceCF && $invoiceCF->cf_1557 ?: '',
             '{{amount_3}}' => $invoiceCF && $invoiceCF->cf_1559 ?: '',
+            '{{ amount_3 }}' => $invoiceCF && $invoiceCF->cf_1559 ?: '',
             '{{amount_3_value}}' => $invoiceCF && $invoiceCF->cf_1561 ?: '',
+            '{{ amount_3_value }}' => $invoiceCF && $invoiceCF->cf_1561 ?: '',
             '{{amount_4}}' => $invoiceCF && $invoiceCF->cf_1563 ?: '',
+            '{{ amount_4 }}' => $invoiceCF && $invoiceCF->cf_1563 ?: '',
             '{{amount_4_value}}' => $invoiceCF && $invoiceCF->cf_1565 ?: '',
+            '{{ amount_4_value }}' => $invoiceCF && $invoiceCF->cf_1565 ?: '',
             '{{unit_area_in_words}}' => $invoiceCF && $invoiceCF->cf_1567 ?: '',
+            '{{ unit_area_in_words }}' => $invoiceCF && $invoiceCF->cf_1567 ?: '',
             '{{delivery_year}}' => $invoiceCF && $invoiceCF->cf_1569 ?: '',
+            '{{ delivery_year }}' => $invoiceCF && $invoiceCF->cf_1569 ?: '',
             '{{day_number}}' => $invoiceCF && $invoiceCF->cf_1573 ?: '',
+            '{{ day_number }}' => $invoiceCF && $invoiceCF->cf_1573 ?: '',
             '{{advance_adjustment}}' => $invoiceCF && $invoiceCF->cf_1575 ?: '',
+            '{{ advance_adjustment }}' => $invoiceCF && $invoiceCF->cf_1575 ?: '',
             '{{garden_area_in_contract}}' => $invoiceCF && $invoiceCF->cf_1591 ?: '',
+            '{{ garden_area_in_contract }}' => $invoiceCF && $invoiceCF->cf_1591 ?: '',
             '{{confirm}}' => $invoiceCF && $invoiceCF->cf_1629 ?: '',
+            '{{ confirm }}' => $invoiceCF && $invoiceCF->cf_1629 ?: '',
             '{{confirm_comment}}' => $invoiceCF && $invoiceCF->cf_1631 ?: '',
+            '{{ confirm_comment }}' => $invoiceCF && $invoiceCF->cf_1631 ?: '',
             '{{project_name}}' => $invoiceCF && $invoiceCF->cf_1669 ?: '',
+            '{{ project_name }}' => $invoiceCF && $invoiceCF->cf_1669 ?: '',
             '{{project_category}}' => $invoiceCF && $invoiceCF->cf_1671 ?: '',
+            '{{ project_category }}' => $invoiceCF && $invoiceCF->cf_1671 ?: '',
             '{{project_location}}' => $invoiceCF && $invoiceCF->cf_1673 ?: '',
+            '{{ project_location }}' => $invoiceCF && $invoiceCF->cf_1673 ?: '',
             '{{unit_category}}' => $invoiceCF && $invoiceCF->cf_1675 ?: '',
+            '{{ unit_category }}' => $invoiceCF && $invoiceCF->cf_1675 ?: '',
             '{{contract_status}}' => $invoiceCF && $invoiceCF->cf_1677 ?: '',
+            '{{ contract_status }}' => $invoiceCF && $invoiceCF->cf_1677 ?: '',
             '{{payment_plan_module}}' => $invoiceCF && $invoiceCF->cf_1789 ?: '',
+            '{{ payment_plan_module }}' => $invoiceCF && $invoiceCF->cf_1789 ?: '',
         ];
 
         $html = str_replace(array_keys($replacements), array_values($replacements), $html);
 
+        // Handle checks table if present (with and without spaces)
+        if (strpos($html, '{{checks_table}}') !== false) {
+            $checksTable = $this->generateChecksTable($checks);
+            $html = str_replace('{{checks_table}}', $checksTable, $html);
+        }
+        if (strpos($html, '{{ checks_table }}') !== false) {
+            $checksTable = $this->generateChecksTable($checks);
+            $html = str_replace('{{ checks_table }}', $checksTable, $html);
+        }
+
         // Add CSS styling
         $css = $template->css ?: $this->getDefaultCss($template->rtl);
         
-        // Combine header, body, and footer with page numbering
+        // Combine header, body, and footer
         $fullHtml = '<!DOCTYPE html><html dir="' . ($template->rtl ? 'rtl' : 'ltr') . '">';
         $fullHtml .= '<head><meta charset="UTF-8"><style>' . $css . '</style></head>';
         $fullHtml .= '<body>';
         
         if ($template->header_html) {
-            $fullHtml .= '<div class="header">' . $template->header_html . '</div>';
+            $headerHtml = str_replace(array_keys($replacements), array_values($replacements), $template->header_html);
+            $fullHtml .= '<div class="header">' . $headerHtml . '</div>';
         }
         
         $fullHtml .= '<div class="content">' . $html . '</div>';
         
-        // Add footer with page numbering
         if ($template->footer_html) {
-            $fullHtml .= '<div class="footer">' . $template->footer_html . '</div>';
+            $footerHtml = str_replace(array_keys($replacements), array_values($replacements), $template->footer_html);
+            $fullHtml .= '<div class="footer">' . $footerHtml . '</div>';
         }
-        
-        // Add page numbering
-        $fullHtml .= '<div class="page-numbering">Page <span class="page"></span> of <span class="topage"></span></div>';
         
         $fullHtml .= '</body></html>';
         
@@ -254,130 +465,46 @@ class PdfExportController extends Controller
     }
 
     /**
-     * Generate PDF from HTML using pure PHP approach
+     * Generate checks table HTML
      */
-    private function generatePdfFromHtml($html, $template)
+    private function generateChecksTable($checks)
     {
-        // Try to use Laravel Snappy first (if available)
-        try {
-            if (class_exists('Barryvdh\Snappy\Facades\SnappyPdf')) {
-                $pdf = \Barryvdh\Snappy\Facades\SnappyPdf::loadHTML($html);
-                $pdf->setOption('page-size', $template->page_size);
-                $pdf->setOption('orientation', $template->orientation);
-                $pdf->setOption('margin-top', $template->margin_top);
-                $pdf->setOption('margin-right', $template->margin_right);
-                $pdf->setOption('margin-bottom', $template->margin_bottom);
-                $pdf->setOption('margin-left', $template->margin_left);
-                $pdf->setOption('encoding', 'UTF-8');
-                $pdf->setOption('enable-local-file-access', true);
-                
-                return $pdf->output();
-            }
-        } catch (\Exception $e) {
-            Log::warning('Laravel Snappy not available, using fallback method: ' . $e->getMessage());
+        if ($checks->isEmpty()) {
+            return '<p style="text-align: center; color: #666; font-style: italic;">No checks found for this payment plan.</p>';
+        }
+
+        $table = '<table class="checks-table" style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 10px;">';
+        $table .= '<thead>';
+        $table .= '<tr>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Check ID</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Bank Name</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Check Number</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Amount</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Collection Date</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Status</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Customer</th>';
+        $table .= '<th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f4f8; font-weight: bold; text-align: center;">Unit</th>';
+        $table .= '</tr>';
+        $table .= '</thead>';
+        $table .= '<tbody>';
+        
+        foreach ($checks as $check) {
+            $table .= '<tr>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' . ($check->checksid ?: '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px;">' . ($check->cf_1723 ?: '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px;">' . ($check->cf_1711 ?: '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px; text-align: right;">' . ($check->cf_1721 ?: '0.00') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' . ($check->cf_1703 ? $this->formatDate($check->cf_1703) : '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' . ($check->cf_1713 ?: '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px;">' . ($check->cf_1717 ?: '') . '</td>';
+            $table .= '<td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' . ($check->cf_1719 ?: '') . '</td>';
+            $table .= '</tr>';
         }
         
-        // Fallback to simple HTML to PDF conversion
-        $pdfContent = $this->simpleHtmlToPdf($html);
+        $table .= '</tbody>';
+        $table .= '</table>';
         
-        return $pdfContent;
-    }
-
-    /**
-     * Simple HTML to PDF conversion (basic implementation)
-     */
-    private function simpleHtmlToPdf($html)
-    {
-        // This is a basic implementation - you can replace this with any PDF library
-        // For now, we'll create a simple text-based PDF structure
-        
-        $lines = explode("\n", strip_tags($html));
-        $pdfContent = "%PDF-1.4\n";
-        $pdfContent .= "1 0 obj\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Type /Catalog\n";
-        $pdfContent .= "/Pages 2 0 R\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "endobj\n";
-        
-        // Add page content
-        $pdfContent .= "2 0 obj\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Type /Pages\n";
-        $pdfContent .= "/Kids [3 0 R]\n";
-        $pdfContent .= "/Count 1\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "endobj\n";
-        
-        // Add page object
-        $pdfContent .= "3 0 obj\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Type /Page\n";
-        $pdfContent .= "/Parent 2 0 R\n";
-        $pdfContent .= "/MediaBox [0 0 595 842]\n";
-        $pdfContent .= "/Contents 4 0 R\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "endobj\n";
-        
-        // Add content stream
-        $content = "/Helvetica 12 Tf\n";
-        $content .= "72 750 Td\n";
-        
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (!empty($line)) {
-                $content .= "(" . $this->escapePdfString($line) . ") Tj\n";
-                $content .= "0 -20 Td\n";
-            }
-        }
-        
-        $pdfContent .= "4 0 obj\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Length " . strlen($content) . "\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "stream\n";
-        $pdfContent .= $content;
-        $pdfContent .= "endstream\n";
-        $pdfContent .= "endobj\n";
-        
-        // Add page numbering
-        $pdfContent .= "5 0 obj\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Type /Font\n";
-        $pdfContent .= "/Subtype /Type1\n";
-        $pdfContent .= "/BaseFont /Helvetica\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "endobj\n";
-        
-        // Add xref table
-        $pdfContent .= "xref\n";
-        $pdfContent .= "0 6\n";
-        $pdfContent .= "0000000000 65535 f \n";
-        $pdfContent .= "0000000009 00000 n \n";
-        $pdfContent .= "0000000058 00000 n \n";
-        $pdfContent .= "0000000117 00000 n \n";
-        $pdfContent .= "0000000200 00000 n \n";
-        $pdfContent .= "0000000300 00000 n \n";
-        
-        // Add trailer
-        $pdfContent .= "trailer\n";
-        $pdfContent .= "<<\n";
-        $pdfContent .= "/Size 6\n";
-        $pdfContent .= "/Root 1 0 R\n";
-        $pdfContent .= ">>\n";
-        $pdfContent .= "startxref\n";
-        $pdfContent .= strlen($pdfContent) . "\n";
-        $pdfContent .= "%%EOF\n";
-        
-        return $pdfContent;
-    }
-
-    /**
-     * Escape PDF string
-     */
-    private function escapePdfString($string)
-    {
-        return str_replace(['(', ')', '\\'], ['\\(', '\\)', '\\\\'], $string);
+        return $table;
     }
 
     /**
@@ -437,15 +564,6 @@ class PdfExportController extends Controller
                 min-height: 400px; 
                 text-align: {$textAlign};
             }
-            .page-numbering {
-                position: fixed;
-                bottom: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                font-size: 10px;
-                color: #666;
-                text-align: center;
-            }
             table { 
                 width: 100%; 
                 border-collapse: collapse; 
@@ -459,6 +577,14 @@ class PdfExportController extends Controller
             th { 
                 background-color: #f2f2f2; 
                 font-weight: bold; 
+            }
+            .checks-table {
+                font-size: 10px;
+            }
+            .checks-table th {
+                background-color: #e8f4f8;
+                font-weight: bold;
+                text-align: center;
             }
             .rtl { 
                 direction: rtl; 

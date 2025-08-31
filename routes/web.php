@@ -57,11 +57,10 @@ Route::get('debug-pdf/{templateId}/invoice/{modelId}', [PdfTemplateController::c
 Route::get('test-wkhtmltopdf', [PdfTemplateController::class, 'testWkhtmltopdf'])
     ->name('test-wkhtmltopdf');
 
-// New PDF Export Routes (using pure PHP approach)
+// DomPDF Export Routes (NEW - Primary routes)
 Route::get('export-pdf/{templateId}/invoice/{modelId}', [PdfExportController::class, 'generatePdf'])
     ->name('export-pdf');
 
-// Debug route for new PDF export
+// Debug route for DomPDF export
 Route::get('debug-export/{templateId}/invoice/{modelId}', [PdfExportController::class, 'debugPdf'])
     ->name('debug-export');
-
