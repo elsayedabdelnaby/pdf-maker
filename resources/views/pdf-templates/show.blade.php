@@ -197,12 +197,12 @@
 
                                         <div class="alert alert-success">
                                             <strong>Available Fields:</strong><br>
-                                            • All Invoice fields ({{ invoice_number }}, {{ amount }}, etc.)<br>
-                                            • All Customer fields ({{ customer_name }}, {{ customer_phone }}, etc.)<br>
-                                            • All Payment Plan fields ({{ payment_plan_id }}, {{ down_payment }},
+                                            • All Invoice fields (&#123;&#123; invoice_number &#125;&#125;, &#123;&#123; amount &#125;&#125;, etc.)<br>
+                                            • All Customer fields (&#123;&#123; customer_name &#125;&#125;, &#123;&#123; customer_phone &#125;&#125;, etc.)<br>
+                                            • All Payment Plan fields (&#123;&#123; payment_plan_id &#125;&#125;, &#123;&#123; down_payment &#125;&#125;,
                                             etc.)<br>
-                                            • Special {{ checks_table }} for automatic checks listing<br>
-                                            • Project & Unit fields ({{ project_name }}, {{ unit_area }}, etc.)
+                                            • Special &#123;&#123; checks_table &#125;&#125; for automatic checks listing<br>
+                                            • Project & Unit fields (&#123;&#123; project_name &#125;&#125;, &#123;&#123; unit_area &#125;&#125;, etc.)
                                         </div>
                                     </div>
                                 </div>

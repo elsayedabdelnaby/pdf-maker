@@ -17,3 +17,9 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+// PDF Export API Routes
+Route::middleware('auth:api')->group(function () {
+    Route::get('export-pdf/{templateId}/invoice/{modelId}', [App\Http\Controllers\PdfExportController::class, 'generatePdf']);
+    Route::get('debug-export/{templateId}/invoice/{modelId}', [App\Http\Controllers\PdfExportController::class, 'debugPdf']);
+});

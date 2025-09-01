@@ -45,7 +45,7 @@
                     </div>
 
                     <div class="row mt-4">
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <div class="card">
                                 <div class="card-header">
                                     <h5 class="mb-0">Account Information</h5>
@@ -68,10 +68,65 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Quick PDF Export</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="quickExportForm">
+                                        <div class="mb-3">
+                                            <label for="quickTemplateId" class="form-label">Template</label>
+                                            <select class="form-control" id="quickTemplateId" required>
+                                                <option value="">Select Template</option>
+                                                @foreach(\App\Models\PdfTemplate::all() as $template)
+                                                    <option value="{{ $template->id }}">{{ $template->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="quickInvoiceId" class="form-label">Invoice ID</label>
+                                            <input type="number" class="form-control" id="quickInvoiceId" placeholder="Enter Invoice ID" required>
+                                        </div>
+                                        <button type="submit" class="btn btn-success w-100">
+                                            <i class="fas fa-file-pdf"></i> Export PDF
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('quickExportForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const templateId = document.getElementById('quickTemplateId').value;
+    const invoiceId = document.getElementById('quickInvoiceId').value;
+    
+    if (!templateId) {
+        alert('Please select a template');
+        return;
+    }
+    
+    if (!invoiceId) {
+        alert('Please enter an Invoice ID');
+        return;
+    }
+    
+    // Use the DomPDF export route
+    const url = `/export-pdf/${templateId}/invoice/${invoiceId}`;
+    
+    // Open in new tab
+    window.open(url, '_blank');
+    
+    // Reset form
+    document.getElementById('quickExportForm').reset();
+});
+</script>
 @endsection
