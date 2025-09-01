@@ -51,8 +51,8 @@ document.getElementById('exportForm{{ $uniqueId ?? 'Default' }}').addEventListen
         return;
     }
     
-    // Use the DomPDF export route
-    const url = `/export-pdf/${templateId}/invoice/${invoiceId}`;
+    // Use the DomPDF export route with correct base path
+    const url = `${window.appConfig.baseUrl}/export-pdf/${templateId}/invoice/${invoiceId}`;
     
     // Open in new tab
     window.open(url, '_blank');

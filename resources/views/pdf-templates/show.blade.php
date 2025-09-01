@@ -119,8 +119,8 @@
                                                     return;
                                                 }
 
-                                                // Use the new DomPDF export route (recommended)
-                                                const url = `/export-pdf/${templateId}/invoice/${modelId}`;
+                                                // Use the new DomPDF export route (recommended) with correct base path
+                                                const url = `${window.appConfig.baseUrl}/export-pdf/${templateId}/invoice/${modelId}`;
 
                                                 // Open in new tab
                                                 window.open(url, '_blank');
@@ -135,8 +135,8 @@
                                                     return;
                                                 }
 
-                                                // Use the old WKHTMLTOPDF method
-                                                const url = `/generate-pdf/${templateId}/invoice/${modelId}`;
+                                                // Use the old WKHTMLTOPDF method with correct base path
+                                                const url = `${window.appConfig.baseUrl}/generate-pdf/${templateId}/invoice/${modelId}`;
                                                 window.open(url, '_blank');
                                             }
 
@@ -149,8 +149,8 @@
                                                     return;
                                                 }
 
-                                                // Debug the new DomPDF method
-                                                const url = `/debug-export/${templateId}/invoice/${modelId}`;
+                                                // Debug the new DomPDF method with correct base path
+                                                const url = `${window.appConfig.baseUrl}/debug-export/${templateId}/invoice/${modelId}`;
                                                 window.open(url, '_blank');
                                             }
 
@@ -163,8 +163,8 @@
                                                     return;
                                                 }
 
-                                                // Debug the old WKHTMLTOPDF method
-                                                const url = `/debug-pdf/${templateId}/invoice/${modelId}`;
+                                                // Debug the old WKHTMLTOPDF method with correct base path
+                                                const url = `${window.appConfig.baseUrl}/debug-pdf/${templateId}/invoice/${modelId}`;
                                                 window.open(url, '_blank');
                                             }
                                         </script>

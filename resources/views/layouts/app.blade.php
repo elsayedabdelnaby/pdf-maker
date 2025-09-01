@@ -86,6 +86,15 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Global JavaScript Variables -->
+    <script>
+        window.appConfig = {
+            baseUrl: '{{ url("/") }}',
+            csrfToken: '{{ csrf_token() }}'
+        };
+    </script>
+    
     @stack('scripts')
 </body>
 </html>
