@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Barryvdh\DomPDF\Facade\Pdf;
+use ArPHP\I18N\Arabic;
 
 class PdfExportController extends Controller
 {
@@ -45,13 +46,29 @@ class PdfExportController extends Controller
             // Set paper size and orientation
             $pdf->setPaper($template->page_size, strtolower($template->orientation));
             
-            // Set options
+            // Set options with Arabic support
             $pdf->setOptions([
                 'isHtml5ParserEnabled' => true,
                 'isPhpEnabled' => true,
                 'isRemoteEnabled' => true,
                 'defaultFont' => $template->rtl ? 'DejaVu Sans' : 'Arial',
                 'dpi' => 96,
+                'isFontSubsettingEnabled' => true,
+                'isUnicode' => true,
+                'debugKeepTemp' => false,
+                'debugCss' => false,
+                'debugLayout' => false,
+                'debugLayoutLines' => false,
+                'debugLayoutBlocks' => false,
+                'debugLayoutInline' => false,
+                'debugLayoutPaddingBox' => false,
+                'fontCache' => storage_path('fonts/'),
+                'tempDir' => storage_path('temp/'),
+                'chroot' => public_path(),
+                'logOutputFile' => storage_path('logs/dompdf.log'),
+                'defaultMediaType' => 'print',
+                'defaultPaperSize' => $template->page_size,
+                'defaultPaperOrientation' => strtolower($template->orientation),
             ]);
 
             $filename = 'invoice_' . $modelId . '_' . date('Y-m-d_H-i-s') . '.pdf';
@@ -63,6 +80,47 @@ class PdfExportController extends Controller
             return response()->json([
                 'error' => 'PDF generation failed',
                 'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Test Arabic text processing
+     */
+    public function testArabicText(Request $request)
+    {
+        try {
+            $testTexts = [
+                'English text' => 'Hello World',
+                'Arabic text' => 'مرحبا بالعالم',
+                'Mixed text' => 'Hello مرحبا World',
+                'Arabic numbers' => '١٢٣٤٥٦٧٨٩٠',
+                'Arabic with English' => 'اسم المستخدم: John Doe',
+            ];
+            
+            $results = [];
+            foreach ($testTexts as $label => $text) {
+                $processed = $this->processArabicText($text);
+                $results[$label] = [
+                    'original' => $text,
+                    'processed' => $processed,
+                    'contains_arabic' => preg_match('/[\x{0600}-\x{06FF}]/u', $text),
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Arabic text processing test completed',
+                'results' => $results,
+                'package_loaded' => class_exists('ArPHP\I18N\Arabic'),
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Arabic text test failed',
+                'message' => $e->getMessage(),
+                'package_loaded' => class_exists('ArPHP\I18N\Arabic'),
             ], 500);
         }
     }
@@ -427,7 +485,13 @@ class PdfExportController extends Controller
             '{{ payment_plan_module }}' => $invoiceCF && $invoiceCF->cf_1789 ?: '',
         ];
 
-        $html = str_replace(array_keys($replacements), array_values($replacements), $html);
+        // Process Arabic text in replacements
+        $processedReplacements = [];
+        foreach ($replacements as $key => $value) {
+            $processedReplacements[$key] = $this->processArabicText($value);
+        }
+        
+        $html = str_replace(array_keys($processedReplacements), array_values($processedReplacements), $html);
 
         // Handle checks table if present (with and without spaces)
         if (strpos($html, '{{checks_table}}') !== false) {
@@ -448,14 +512,14 @@ class PdfExportController extends Controller
         $fullHtml .= '<body>';
         
         if ($template->header_html) {
-            $headerHtml = str_replace(array_keys($replacements), array_values($replacements), $template->header_html);
+            $headerHtml = str_replace(array_keys($processedReplacements), array_values($processedReplacements), $template->header_html);
             $fullHtml .= '<div class="header">' . $headerHtml . '</div>';
         }
         
         $fullHtml .= '<div class="content">' . $html . '</div>';
         
         if ($template->footer_html) {
-            $footerHtml = str_replace(array_keys($replacements), array_values($replacements), $template->footer_html);
+            $footerHtml = str_replace(array_keys($processedReplacements), array_values($processedReplacements), $template->footer_html);
             $fullHtml .= '<div class="footer">' . $footerHtml . '</div>';
         }
         
@@ -508,6 +572,34 @@ class PdfExportController extends Controller
     }
 
     /**
+     * Process Arabic text for proper rendering
+     */
+    private function processArabicText($text)
+    {
+        if (empty($text)) {
+            return $text;
+        }
+        
+        try {
+            $arabic = new Arabic();
+            
+            // Check if text contains Arabic characters
+            if (preg_match('/[\x{0600}-\x{06FF}]/u', $text)) {
+                // Process Arabic text for proper display
+                $text = $arabic->utf8Glyphs($text);
+                
+                // Add proper HTML attributes for Arabic text
+                return '<span dir="rtl" lang="ar" style="font-family: \'Tahoma\', \'Arial Unicode MS\', sans-serif; unicode-bidi: bidi-override;">' . $text . '</span>';
+            }
+            
+            return $text;
+        } catch (\Exception $e) {
+            Log::warning('Arabic text processing failed: ' . $e->getMessage());
+            return $text;
+        }
+    }
+
+    /**
      * Format date
      */
     private function formatDate($date)
@@ -540,13 +632,14 @@ class PdfExportController extends Controller
         
         return "
             body { 
-                font-family: 'Arial', 'Tahoma', 'Times New Roman', sans-serif; 
+                font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', 'Arial', sans-serif; 
                 direction: {$direction}; 
                 text-align: {$textAlign}; 
                 margin: 0; 
                 padding: 20px; 
                 font-size: 12px;
                 line-height: 1.4;
+                unicode-bidi: bidi-override;
             }
             .header { 
                 border-bottom: 2px solid #333; 
@@ -595,18 +688,26 @@ class PdfExportController extends Controller
                 direction: ltr; 
                 text-align: left; 
             }
-            [lang=\"AR-EG\"] {
-                font-family: 'Tahoma', 'Arial', sans-serif;
+            [lang=\"AR-EG\"], [lang=\"ar\"] {
+                font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', sans-serif;
                 direction: rtl;
                 text-align: right;
+                unicode-bidi: bidi-override;
             }
             [dir=\"rtl\"] {
                 direction: rtl;
                 text-align: right;
+                unicode-bidi: bidi-override;
             }
             [dir=\"ltr\"] {
                 direction: ltr;
                 text-align: left;
+            }
+            span[dir=\"rtl\"], span[lang=\"ar\"] {
+                font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', sans-serif;
+                direction: rtl;
+                unicode-bidi: bidi-override;
+                display: inline-block;
             }
             .page-break {
                 page-break-before: always;

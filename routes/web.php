@@ -64,3 +64,7 @@ Route::get('export-pdf/{templateId}/invoice/{modelId}', [PdfExportController::cl
 // Debug route for DomPDF export
 Route::get('debug-export/{templateId}/invoice/{modelId}', [PdfExportController::class, 'debugPdf'])
     ->name('debug-export');
+
+// Test Arabic text processing
+Route::get('test-arabic', [PdfExportController::class, 'testArabicText'])
+    ->name('test-arabic');
