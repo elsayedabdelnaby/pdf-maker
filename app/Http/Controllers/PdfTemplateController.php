@@ -134,7 +134,7 @@ class PdfTemplateController extends Controller
             }
             
             // Generate PDF using direct shell execution (more reliable on Windows)
-            $binaryPath = 'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe';
+            $binaryPath = '/home/thenewc1/bin/usr/local/bin/wkhtmltopdf';
             
             // Check if binary exists first
             if (!file_exists($binaryPath)) {

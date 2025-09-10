@@ -100,7 +100,7 @@ class PdfExportController extends Controller
             
             $results = [];
             foreach ($testTexts as $label => $text) {
-                $processed = $this->processArabicText($text);
+                $processed = $this->processMixedContent($text);
                 $results[$label] = [
                     'original' => $text,
                     'processed' => $processed,
@@ -488,7 +488,7 @@ class PdfExportController extends Controller
         // Process Arabic text in replacements
         $processedReplacements = [];
         foreach ($replacements as $key => $value) {
-            $processedReplacements[$key] = $this->processArabicText($value);
+            $processedReplacements[$key] = $this->processMixedContent($value);
         }
         
         $html = str_replace(array_keys($processedReplacements), array_values($processedReplacements), $html);
@@ -586,10 +586,16 @@ class PdfExportController extends Controller
             // Check if text contains Arabic characters
             if (preg_match('/[\x{0600}-\x{06FF}]/u', $text)) {
                 // Process Arabic text for proper display
-                $text = $arabic->utf8Glyphs($text);
+                $processedText = $arabic->utf8Glyphs($text);
                 
-                // Add proper HTML attributes for Arabic text
-                return '<span dir="rtl" lang="ar" style="font-family: \'Tahoma\', \'Arial Unicode MS\', sans-serif; unicode-bidi: bidi-override;">' . $text . '</span>';
+                // Try alternative processing if needed
+                if ($processedText === $text) {
+                    // Use different approach for better Arabic text shaping
+                    $processedText = $arabic->utf8Glyphs($text);
+                }
+                
+                // Add proper HTML attributes for Arabic text with better styling
+                return '<span class="arabic-text" dir="rtl" lang="ar">' . $processedText . '</span>';
             }
             
             return $text;
@@ -597,6 +603,32 @@ class PdfExportController extends Controller
             Log::warning('Arabic text processing failed: ' . $e->getMessage());
             return $text;
         }
+    }
+
+    /**
+     * Process mixed content with Arabic and non-Arabic text
+     */
+    private function processMixedContent($text)
+    {
+        if (empty($text)) {
+            return $text;
+        }
+        
+        // Split text into Arabic and non-Arabic parts
+        $parts = preg_split('/([\x{0600}-\x{06FF}]+)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $result = '';
+        
+        foreach ($parts as $part) {
+            if (preg_match('/[\x{0600}-\x{06FF}]/u', $part)) {
+                // This part contains Arabic text
+                $result .= $this->processArabicText($part);
+            } else {
+                // This part is non-Arabic text
+                $result .= $part;
+            }
+        }
+        
+        return $result;
     }
 
     /**
@@ -639,7 +671,9 @@ class PdfExportController extends Controller
                 padding: 20px; 
                 font-size: 12px;
                 line-height: 1.4;
-                unicode-bidi: bidi-override;
+                unicode-bidi: embed;
+                text-rendering: optimizeLegibility;
+                font-feature-settings: \"liga\" 1, \"calt\" 1;
             }
             .header { 
                 border-bottom: 2px solid #333; 
@@ -692,12 +726,15 @@ class PdfExportController extends Controller
                 font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', sans-serif;
                 direction: rtl;
                 text-align: right;
-                unicode-bidi: bidi-override;
+                unicode-bidi: embed;
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
             }
             [dir=\"rtl\"] {
                 direction: rtl;
                 text-align: right;
-                unicode-bidi: bidi-override;
+                unicode-bidi: embed;
+                writing-mode: horizontal-tb;
             }
             [dir=\"ltr\"] {
                 direction: ltr;
@@ -706,8 +743,27 @@ class PdfExportController extends Controller
             span[dir=\"rtl\"], span[lang=\"ar\"] {
                 font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', sans-serif;
                 direction: rtl;
-                unicode-bidi: bidi-override;
-                display: inline-block;
+                unicode-bidi: embed;
+                display: inline;
+                text-align: right;
+                white-space: nowrap;
+                word-spacing: normal;
+                letter-spacing: normal;
+                text-rendering: optimizeLegibility;
+                font-feature-settings: \"liga\" 1, \"calt\" 1;
+            }
+            .arabic-text {
+                font-family: 'DejaVu Sans', 'Tahoma', 'Arial Unicode MS', sans-serif;
+                direction: rtl;
+                unicode-bidi: embed;
+                text-align: right;
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
+                white-space: nowrap;
+                word-spacing: normal;
+                letter-spacing: normal;
+                text-rendering: optimizeLegibility;
+                font-feature-settings: \"liga\" 1, \"calt\" 1;
             }
             .page-break {
                 page-break-before: always;
