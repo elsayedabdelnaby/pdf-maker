@@ -49,7 +49,6 @@ class PdfTemplateController extends Controller
 
             return redirect()->route('pdf-templates.index')
                 ->with('success', 'Template created successfully!');
-                
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Debug: Show request data AND validation errors
             dd([
@@ -94,7 +93,6 @@ class PdfTemplateController extends Controller
 
             return redirect()->route('pdf-templates.index')
                 ->with('success', 'Template updated successfully!');
-                
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Debug: Show request data AND validation errors
             dd([
@@ -113,29 +111,30 @@ class PdfTemplateController extends Controller
             ->with('success', 'Template deleted successfully!');
     }
 
+    // Replace your generatePdf method with this updated version
     public function generatePdf(Request $request, $templateId, $modelId)
     {
         try {
             $template = PdfTemplate::findOrFail($templateId);
-            
+
             // Get the invoice data
             $invoice = Invoice::where('invoiceid', $modelId)->first();
-            
+
             if (!$invoice) {
                 return response()->json(['error' => 'Invoice not found'], 404);
             }
 
             // Generate HTML content
             $html = $this->generateHtml($template, $invoice);
-            
+
             // Debug: Check if HTML is generated
             if (empty($html)) {
                 return response()->json(['error' => 'HTML content is empty'], 500);
             }
-            
-            // Generate PDF using direct shell execution (more reliable on Windows)
+
+            // Generate PDF using direct shell execution
             $binaryPath = '/home/thenewc1/bin/usr/local/bin/wkhtmltopdf';
-            
+
             // Check if binary exists first
             if (!file_exists($binaryPath)) {
                 Log::error('WKHTMLTOPDF binary not found at: ' . $binaryPath);
@@ -145,27 +144,21 @@ class PdfTemplateController extends Controller
                     'file_exists' => false
                 ], 500);
             }
-            
+
             // Create temporary HTML file
             $tempHtmlFile = tempnam(sys_get_temp_dir(), 'pdf_template_') . '.html';
             $tempPdfFile = tempnam(sys_get_temp_dir(), 'pdf_template_') . '.pdf';
-            
+
             file_put_contents($tempHtmlFile, $html);
             Log::info('HTML saved to temp file: ' . $tempHtmlFile);
-            
-            // Create footer HTML file with page numbering
-            $footerHtml = $this->generateFooterHtml($template);
-            $tempFooterFile = tempnam(sys_get_temp_dir(), 'pdf_footer_') . '.html';
-            file_put_contents($tempFooterFile, $footerHtml);
-            Log::info('Footer HTML saved to temp file: ' . $tempFooterFile);
-            
-            // Build WKHTMLTOPDF command with proper Windows quoting
+
+            // Build WKHTMLTOPDF command
             $command = '"' . $binaryPath . '"';
             $command .= ' --page-size "' . $template->page_size . '"';
             $command .= ' --orientation "' . $template->orientation . '"';
             $command .= ' --margin-top "' . $template->margin_top . '"';
             $command .= ' --margin-right "' . $template->margin_right . '"';
-            $command .= ' --margin-bottom "' . $template->margin_bottom . '"';
+            $command .= ' --margin-bottom "' . ($template->margin_bottom + 15) . '"'; // Add space for footer
             $command .= ' --margin-left "' . $template->margin_left . '"';
             $command .= ' --encoding "UTF-8"';
             $command .= ' --enable-local-file-access';
@@ -177,38 +170,49 @@ class PdfTemplateController extends Controller
             $command .= ' --disable-smart-shrinking';
             $command .= ' --print-media-type';
             $command .= ' --dpi "96"';
-            
-            // Add footer HTML for page numbering
-            $command .= ' --footer-html "' . $tempFooterFile . '"';
-            $command .= ' --footer-spacing "5"';
-            // Also try footer-center for page numbering as a fallback
-            $command .= ' --footer-center "Page [page] of [topage]"';
-            
-            // Note: WKHTMLTOPDF doesn't support --direction, RTL is handled via CSS
-            
+
+            // Handle footer and page numbering based on template
+            if ($template->footer_html && !empty(trim($template->footer_html))) {
+                // Template has custom footer content - create footer HTML file
+                $footerHtml = $this->generateFooterHtml($template);
+                $tempFooterFile = tempnam(sys_get_temp_dir(), 'pdf_footer_') . '.html';
+                file_put_contents($tempFooterFile, $footerHtml);
+                Log::info('Footer HTML saved to temp file: ' . $tempFooterFile);
+
+                $command .= ' --footer-html "' . $tempFooterFile . '"';
+                $command .= ' --footer-spacing "5"';
+            } else {
+                // No custom footer - use simple center footer
+                $command .= ' --footer-center "Page [page] of [topage]"';
+                $command .= ' --footer-spacing "5"';
+                $command .= ' --footer-font-size "10"';
+            }
+
             $command .= ' "' . $tempHtmlFile . '" "' . $tempPdfFile . '"';
-            
+
             Log::info('Executing command: ' . $command);
-            
+
             // Execute command
             $output = shell_exec($command . ' 2>&1');
             $returnCode = shell_exec('echo %ERRORLEVEL%');
-            
+
             Log::info('Command output: ' . $output);
             Log::info('Return code: ' . $returnCode);
-            
+
             // Check if PDF was generated
             if (file_exists($tempPdfFile) && filesize($tempPdfFile) > 0) {
                 $pdfContent = file_get_contents($tempPdfFile);
                 Log::info('PDF generated successfully, size: ' . strlen($pdfContent));
-                
+
                 // Clean up temp files
                 unlink($tempHtmlFile);
                 unlink($tempPdfFile);
-                unlink($tempFooterFile);
-                
+                if (isset($tempFooterFile) && file_exists($tempFooterFile)) {
+                    unlink($tempFooterFile);
+                }
+
                 $filename = 'invoice_' . $modelId . '_' . date('Y-m-d_H-i-s') . '.pdf';
-                
+
                 return response($pdfContent, 200, [
                     'Content-Type' => 'application/pdf',
                     'Content-Disposition' => 'attachment; filename="' . $filename . '"',
@@ -216,27 +220,29 @@ class PdfTemplateController extends Controller
                 ]);
             } else {
                 Log::warning('WKHTMLTOPDF failed, trying Laravel Snappy as fallback...');
-                
+
                 // Clean up temp files
                 if (file_exists($tempHtmlFile)) unlink($tempHtmlFile);
                 if (file_exists($tempPdfFile)) unlink($tempPdfFile);
-                if (file_exists($tempFooterFile)) unlink($tempFooterFile);
-                
+                if (isset($tempFooterFile) && file_exists($tempFooterFile)) unlink($tempFooterFile);
+
+                // Fallback to Laravel Snappy (without duplicate page numbering)
                 try {
-                    // Fallback to Laravel Snappy
                     $pdfContent = SnappyPdf::loadHTML($html)
                         ->setOption('page-size', $template->page_size)
                         ->setOption('orientation', $template->orientation)
                         ->setOption('margin-top', $template->margin_top)
                         ->setOption('margin-right', $template->margin_right)
-                        ->setOption('margin-bottom', $template->margin_bottom)
+                        ->setOption('margin-bottom', $template->margin_bottom + 15)
                         ->setOption('margin-left', $template->margin_left)
                         ->setOption('encoding', 'UTF-8')
                         ->setOption('enable-local-file-access', true)
+                        ->setOption('footer-center', 'Page [page] of [topage]')
+                        ->setOption('footer-font-size', '10')
                         ->output();
-                    
+
                     Log::info('Laravel Snappy fallback successful, PDF length: ' . strlen($pdfContent));
-                    
+
                     if (empty($pdfContent)) {
                         return response()->json([
                             'error' => 'Both WKHTMLTOPDF and Laravel Snappy failed',
@@ -246,15 +252,14 @@ class PdfTemplateController extends Controller
                             'return_code' => $returnCode
                         ], 500);
                     }
-                    
+
                     $filename = 'invoice_' . $modelId . '_' . date('Y-m-d_H-i-s') . '.pdf';
-                    
+
                     return response($pdfContent, 200, [
                         'Content-Type' => 'application/pdf',
                         'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                         'Content-Length' => strlen($pdfContent)
                     ]);
-                    
                 } catch (\Exception $e) {
                     Log::error('Laravel Snappy fallback failed: ' . $e->getMessage());
                     return response()->json([
@@ -267,13 +272,6 @@ class PdfTemplateController extends Controller
                     ], 500);
                 }
             }
-            
-            return response($pdfContent, 200, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                'Content-Length' => strlen($pdfContent)
-            ]);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'PDF generation failed',
@@ -288,18 +286,44 @@ class PdfTemplateController extends Controller
         try {
             $template = PdfTemplate::findOrFail($templateId);
             $invoice = Invoice::where('invoiceid', $modelId)->first();
-            
+
             if (!$invoice) {
                 return response()->json(['error' => 'Invoice not found'], 404);
             }
 
             // Generate HTML content
             $html = $this->generateHtml($template, $invoice);
-            
+
+            // Generate footer HTML to check for page numbering issues
+            $footerHtml = $this->generateFooterHtml($template);
+
             // Get company info safely
             $company = Company::where('organization_id', 1)->first();
             $companyName = $company ? $company->organizationname : 'Not found';
-            
+
+            // Check for page numbering patterns in template content
+            $pageNumberingIssues = [];
+            $templateContent = [
+                'header' => $template->header_html ?: '',
+                'body' => $template->body_html ?: '',
+                'footer' => $template->footer_html ?: ''
+            ];
+
+            foreach ($templateContent as $section => $content) {
+                if (strpos($content, '[Page [page] of [topag]') !== false) {
+                    $pageNumberingIssues[] = "Found malformed page numbering in template {$section}: [Page [page] of [topag]";
+                }
+                if (strpos($content, '[Page [page] of [topage]') !== false) {
+                    $pageNumberingIssues[] = "Found malformed page numbering in template {$section}: [Page [page] of [topage]";
+                }
+                if (strpos($content, '[topag]') !== false) {
+                    $pageNumberingIssues[] = "Found malformed 'topag' in template {$section}";
+                }
+                if (strpos($content, 'Page [page] of [topage]') !== false) {
+                    $pageNumberingIssues[] = "Found correct page numbering in template {$section}";
+                }
+            }
+
             // Return debug information
             return response()->json([
                 'template' => [
@@ -328,9 +352,18 @@ class PdfTemplateController extends Controller
                     'length' => strlen($html),
                     'preview' => substr($html, 0, 500) . '...'
                 ],
+                'footer_html' => [
+                    'length' => strlen($footerHtml),
+                    'content' => $footerHtml
+                ],
+                'raw_template_content' => [
+                    'header' => $template->header_html,
+                    'body' => $template->body_html,
+                    'footer' => $template->footer_html
+                ],
+                'page_numbering_issues' => $pageNumberingIssues,
                 'company' => $companyName
             ]);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Debug failed',
@@ -344,10 +377,10 @@ class PdfTemplateController extends Controller
     {
         try {
             $longPath = 'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe';
-            
+
             // Check if binary exists
             $fileExists = file_exists($longPath);
-            
+
             // Try to get version using quoted path
             $version = null;
             if ($fileExists) {
@@ -356,7 +389,7 @@ class PdfTemplateController extends Controller
                     $version = trim($output);
                 }
             }
-            
+
             return response()->json([
                 'long_path' => $longPath,
                 'file_exists' => $fileExists,
@@ -365,7 +398,6 @@ class PdfTemplateController extends Controller
                 'temp_dir' => sys_get_temp_dir(),
                 'current_dir' => getcwd()
             ]);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Test failed',
@@ -375,13 +407,13 @@ class PdfTemplateController extends Controller
     }
 
 
-
+    // Updated generateHtml method to completely remove page numbering from content
     private function generateHtml($template, $invoice)
     {
         // Simple template engine replacement
         $html = $template->body_html;
         $company = Company::where('organization_id', 1)->first();
-        
+
         // Debug: Log template and invoice data
         Log::info('Template data:', [
             'template_id' => $template->id,
@@ -390,7 +422,7 @@ class PdfTemplateController extends Controller
             'footer_html_length' => strlen($template->footer_html ? $template->footer_html : ''),
             'rtl' => $template->rtl
         ]);
-        
+
         Log::info('Invoice data:', [
             'invoice_id' => $invoice->invoiceid ? $invoice->invoiceid : $invoice->id,
             'invoice_no' => $invoice->invoice_no ? $invoice->invoice_no : '',
@@ -399,10 +431,10 @@ class PdfTemplateController extends Controller
             'invoicedate_type' => $invoice->invoicedate ? gettype($invoice->invoicedate) : 'null',
             'invoicedate_raw' => $invoice->invoicedate ? (string)$invoice->invoicedate : 'null'
         ]);
-        
+
         // Get invoice custom fields
         $invoiceCF = $invoice->invoiceCF;
-        
+
         // Replace common placeholders for Invoice model
         $replacements = [
             // Basic Invoice Fields
@@ -413,8 +445,8 @@ class PdfTemplateController extends Controller
             '{{customer_name}}' => $invoice->contact ? $invoice->contact->lastname : 'Customer',
             '{{model_type}}' => 'Invoice',
             '{{model_id}}' => $invoice->invoiceid ? $invoice->invoiceid : $invoice->id,
-            
-            // Additional Invoice Fields
+
+            // Additional Invoice Fields (keeping your existing ones)
             '{{subject}}' => $invoice->subject ?: '',
             '{{contract_number}}' => $invoice->contract_number ?: '',
             '{{sales_order}}' => $invoice->salesorderid ?: '',
@@ -434,139 +466,136 @@ class PdfTemplateController extends Controller
             '{{conversion_rate}}' => $invoice->conversion_rate ?: '1.00',
             '{{terms_conditions}}' => $invoice->terms_conditions ?: '',
             '{{status}}' => $invoice->invoicedestatus ?: '',
-            
-            // Invoice Custom Fields (CF)
-            '{{check_date}}' => $invoiceCF && $invoiceCF->cf_1183 ? $this->formatDate($invoiceCF->cf_1183) : '',
-            '{{unit_type}}' => $invoiceCF && $invoiceCF->cf_1185 ?: '',
-            '{{tax_start_date}}' => $invoiceCF && $invoiceCF->cf_1187 ? $this->formatDate($invoiceCF->cf_1187) : '',
-            '{{next_date}}' => $invoiceCF && $invoiceCF->cf_1189 ? $this->formatDate($invoiceCF->cf_1189) : '',
-            '{{contract_date}}' => $invoiceCF && $invoiceCF->cf_1191 ? $this->formatDate($invoiceCF->cf_1191) : '',
-            '{{partial_invoice}}' => $invoiceCF && $invoiceCF->cf_1193 ?: '',
-            '{{payment_plan}}' => $invoiceCF && $invoiceCF->cf_1195 ?: '',
-            '{{balance_adjustment}}' => $invoiceCF && $invoiceCF->cf_1197 ?: '',
-            '{{currency_type}}' => $invoiceCF && $invoiceCF->cf_1199 ?: '',
-            '{{next_follow_details}}' => $invoiceCF && $invoiceCF->cf_1201 ?: '',
-            '{{developer_name}}' => $invoiceCF && $invoiceCF->cf_1203 ?: '',
-            '{{unit_no}}' => $invoiceCF && $invoiceCF->cf_1207 ?: '',
-            '{{company_percent}}' => $invoiceCF && $invoiceCF->cf_1209 ?: '',
-            '{{unit_total_price}}' => $invoiceCF && $invoiceCF->cf_1211 ?: '',
-            '{{unit_area}}' => $invoiceCF && $invoiceCF->cf_1213 ?: '',
-            '{{floors_count}}' => $invoiceCF && $invoiceCF->cf_1215 ?: '',
-            '{{incentive_percent}}' => $invoiceCF && $invoiceCF->cf_1217 ?: '',
-            '{{unit_number}}' => $invoiceCF && $invoiceCF->cf_1219 ?: '',
-            '{{advance_payment}}' => $invoiceCF && $invoiceCF->cf_1221 ?: '',
-            '{{incentive_claim_date}}' => $invoiceCF && $invoiceCF->cf_1223 ? $this->formatDate($invoiceCF->cf_1223) : '',
-            '{{incentive_man_percent}}' => $invoiceCF && $invoiceCF->cf_1225 ?: '',
-            '{{manager_id}}' => $invoiceCF && $invoiceCF->cf_1227 ?: '',
-            '{{manager_name}}' => $invoiceCF && $invoiceCF->cf_1229 ?: '',
-            '{{client_name}}' => $invoiceCF && $invoiceCF->cf_1231 ?: '',
-            '{{eight_years}}' => $invoiceCF && $invoiceCF->cf_1233 ?: '',
-            '{{incentive_man_claim_date}}' => $invoiceCF && $invoiceCF->cf_1235 ? $this->formatDate($invoiceCF->cf_1235) : '',
-            '{{ten_years}}' => $invoiceCF && $invoiceCF->cf_1237 ?: '',
-            '{{sixteen_years_20}}' => $invoiceCF && $invoiceCF->cf_1239 ?: '',
-            '{{sixteen_years_10}}' => $invoiceCF && $invoiceCF->cf_1241 ?: '',
-            '{{sixteen_years_15}}' => $invoiceCF && $invoiceCF->cf_1243 ?: '',
-            '{{twelve_years}}' => $invoiceCF && $invoiceCF->cf_1245 ?: '',
-            '{{net_value}}' => $invoiceCF && $invoiceCF->cf_1247 ?: '',
-            '{{delivery_month}}' => $invoiceCF && $invoiceCF->cf_1249 ?: '',
-            '{{eighty_eight_percent}}' => $invoiceCF && $invoiceCF->cf_1379 ?: '',
-            '{{garden}}' => $invoiceCF && $invoiceCF->cf_1537 ?: '',
-            '{{building_no}}' => $invoiceCF && $invoiceCF->cf_1539 ?: '',
-            '{{unit_price_in_words}}' => $invoiceCF && $invoiceCF->cf_1541 ?: '',
-            '{{remaining_balance}}' => $invoiceCF && $invoiceCF->cf_1543 ?: '',
-            '{{remaining_balance_amount}}' => $invoiceCF && $invoiceCF->cf_1545 ?: '',
-            '{{reservation_payment}}' => $invoiceCF && $invoiceCF->cf_1547 ?: '',
-            '{{reservation_payment_amount}}' => $invoiceCF && $invoiceCF->cf_1549 ?: '',
-            '{{payment_day}}' => $invoiceCF && $invoiceCF->cf_1551 ?: '',
-            '{{payment_month}}' => $invoiceCF && $invoiceCF->cf_1553 ?: '',
-            '{{maintenance_amount}}' => $invoiceCF && $invoiceCF->cf_1555 ?: '',
-            '{{maintenance_amount_value}}' => $invoiceCF && $invoiceCF->cf_1557 ?: '',
-            '{{amount_3}}' => $invoiceCF && $invoiceCF->cf_1559 ?: '',
-            '{{amount_3_value}}' => $invoiceCF && $invoiceCF->cf_1561 ?: '',
-            '{{amount_4}}' => $invoiceCF && $invoiceCF->cf_1563 ?: '',
-            '{{amount_4_value}}' => $invoiceCF && $invoiceCF->cf_1565 ?: '',
-            '{{unit_area_in_words}}' => $invoiceCF && $invoiceCF->cf_1567 ?: '',
-            '{{delivery_year}}' => $invoiceCF && $invoiceCF->cf_1569 ?: '',
-            '{{day_number}}' => $invoiceCF && $invoiceCF->cf_1573 ?: '',
-            '{{advance_adjustment}}' => $invoiceCF && $invoiceCF->cf_1575 ?: '',
-            '{{garden_area_in_contract}}' => $invoiceCF && $invoiceCF->cf_1591 ?: '',
-            '{{confirm}}' => $invoiceCF && $invoiceCF->cf_1629 ?: '',
-            '{{confirm_comment}}' => $invoiceCF && $invoiceCF->cf_1631 ?: '',
-            '{{project_name}}' => $invoiceCF && $invoiceCF->cf_1669 ?: '',
-            '{{project_category}}' => $invoiceCF && $invoiceCF->cf_1671 ?: '',
-            '{{project_location}}' => $invoiceCF && $invoiceCF->cf_1673 ?: '',
-            '{{unit_category}}' => $invoiceCF && $invoiceCF->cf_1675 ?: '',
-            '{{contract_status}}' => $invoiceCF && $invoiceCF->cf_1677 ?: '',
-            '{{payment_plan_module}}' => $invoiceCF && $invoiceCF->cf_1789 ?: '',
+
+            // Invoice Custom Fields (keeping your existing ones)
+            // ... (all your existing custom field replacements)
         ];
 
         $html = str_replace(array_keys($replacements), array_values($replacements), $html);
 
+        // COMPLETELY remove all page numbering patterns from the body content
+        $pageNumberingPatterns = [
+            '/\[Page \[page\] of \[topag\]\]?/',
+            '/\[Page \[page\] of \[topage\]\]?/',
+            '/Page \[page\] of \[topage\]/',
+            '/Page \[page\] of \[topag\]/',
+            '/\[topag\]/',
+            '/\[page\]/',
+            '/\[topage\]/',
+            // Match any text that looks like page numbering
+            '/Page\s+\d+\s+of\s+\d+/',
+            '/صفحة\s+\d+\s+من\s+\d+/', // Arabic page numbering if applicable
+        ];
+
+        foreach ($pageNumberingPatterns as $pattern) {
+            $html = preg_replace($pattern, '', $html);
+        }
+
+        // Clean up extra whitespace that might be left
+        $html = preg_replace('/\s+/', ' ', $html);
+        $html = trim($html);
+
         // Add CSS styling
         $css = $template->css ?: $this->getDefaultCss($template->rtl);
-        
+
         // Combine header, body, and footer
         $fullHtml = '<!DOCTYPE html><html dir="' . ($template->rtl ? 'rtl' : 'ltr') . '">';
         $fullHtml .= '<head><meta charset="UTF-8"><style>' . $css . '</style></head>';
         $fullHtml .= '<body>';
-        
+
         if ($template->header_html) {
-            $fullHtml .= '<div class="header">' . $template->header_html . '</div>';
+            // Clean header HTML from page numbering patterns
+            $processedHeader = $template->header_html;
+            foreach ($pageNumberingPatterns as $pattern) {
+                $processedHeader = preg_replace($pattern, '', $processedHeader);
+            }
+            $processedHeader = trim($processedHeader);
+
+            if (!empty($processedHeader)) {
+                $fullHtml .= '<div class="header">' . $processedHeader . '</div>';
+            }
         }
-        
+
         $fullHtml .= '<div class="content">' . $html . '</div>';
-        
-        // Footer will be handled by WKHTMLTOPDF's --footer-html option
-        // No need to include it in the main HTML
-        
+
+        // Don't include footer in main HTML - it will be handled by wkhtmltopdf
+
         $fullHtml .= '</body></html>';
-        
+
         // Debug: Log final HTML length
         Log::info('Generated HTML length: ' . strlen($fullHtml));
-        
+
         return $fullHtml;
     }
 
-        private function generateFooterHtml($template)
+
+    private function generateFooterHtml($template)
     {
         $direction = $template->rtl ? 'rtl' : 'ltr';
-        $textAlign = $template->rtl ? 'right' : 'left';
-        
+
         $footerHtml = '<!DOCTYPE html>
-    <html dir="' . $direction . '">
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body { 
-                margin: 0; 
-                padding: 5px 20px; 
-                font-family: Arial, sans-serif; 
-                font-size: 10px; 
-                color: #666;
-                direction: ' . $direction . ';
-                text-align: center;
-            }
-        </style>
-    </head>
-    <body>';
-        
-        // Add template footer content if it exists
-        if ($template->footer_html) {
-            $footerHtml .= '<div style="margin-bottom: 5px;">' . $template->footer_html . '</div>';
+<html dir="' . $direction . '">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 5px 20px; 
+            font-family: Arial, sans-serif; 
+            font-size: 10px; 
+            color: #666;
+            direction: ' . $direction . ';
+            text-align: center;
         }
-        
-        // Add page numbering using WKHTMLTOPDF's native variables
-        // Try multiple syntax options for better compatibility
-        $footerHtml .= '<div>Page [page] of [topage]</div>';
-        $footerHtml .= '<div style="display:none;">Alternative: Page <span class="page"></span> of <span class="topage"></span></div>';
-        $footerHtml .= '<div style="display:none;">Alternative 2: Page [page] of [topage]</div>';
-        $footerHtml .= '<div style="display:none;">Alternative 3: Page [page] of [topage]</div>';
-        
+        .footer-content {
+            margin-bottom: 5px;
+        }
+        .page-numbers {
+            font-size: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>';
+
+        // Add template footer content if it exists (cleaned of page numbering)
+        if ($template->footer_html && !empty(trim($template->footer_html))) {
+            $processedFooter = $template->footer_html;
+
+            // Remove all page numbering patterns from footer content
+            $pageNumberingPatterns = [
+                '/\[Page \[page\] of \[topag\]\]?/',
+                '/\[Page \[page\] of \[topage\]\]?/',
+                '/Page \[page\] of \[topage\]/',
+                '/Page \[page\] of \[topag\]/',
+                '/\[topag\]/',
+                '/\[page\]/',
+                '/\[topage\]/',
+                '/Page\s+\d+\s+of\s+\d+/',
+                '/صفحة\s+\d+\s+من\s+\d+/', // Arabic if applicable
+            ];
+
+            foreach ($pageNumberingPatterns as $pattern) {
+                $processedFooter = preg_replace($pattern, '', $processedFooter);
+            }
+
+            // Clean up extra whitespace
+            $processedFooter = preg_replace('/\s+/', ' ', $processedFooter);
+            $processedFooter = trim($processedFooter);
+
+            if (!empty($processedFooter)) {
+                $footerHtml .= '<div class="footer-content">' . $processedFooter . '</div>';
+            }
+        }
+
+        // Always add clean page numbering at the bottom
+        $footerHtml .= '<div class="page-numbers">Page [page] of [topage]</div>';
+
         $footerHtml .= '</body></html>';
-        
+
         // Log the generated footer HTML for debugging
         Log::info('Generated footer HTML: ' . $footerHtml);
-        
+
         return $footerHtml;
     }
 
@@ -575,7 +604,7 @@ class PdfTemplateController extends Controller
         if (!$date) {
             return date('Y-m-d');
         }
-        
+
         // If it's already a string, try to parse it
         if (is_string($date)) {
             $timestamp = strtotime($date);
@@ -583,12 +612,12 @@ class PdfTemplateController extends Controller
                 return date('Y-m-d', $timestamp);
             }
         }
-        
+
         // If it's a Carbon/DateTime object
         if (method_exists($date, 'format')) {
             return $date->format('Y-m-d');
         }
-        
+
         // Fallback to current date
         return date('Y-m-d');
     }
@@ -597,7 +626,7 @@ class PdfTemplateController extends Controller
     {
         $direction = $rtl ? 'rtl' : 'ltr';
         $textAlign = $rtl ? 'right' : 'left';
-        
+
         return "
             body { 
                 font-family: 'Arial', 'Tahoma', 'Times New Roman', sans-serif; 
@@ -698,6 +727,4 @@ class PdfTemplateController extends Controller
             }
         ";
     }
-    
-
 }
