@@ -192,22 +192,51 @@
                                     <div class="card-body">
                                         <div class="alert alert-info">
                                             <strong>Most Common Fields:</strong><br>
-                                            <code>&#123;&#123; company_name &#125;&#125;</code>, <code>&#123;&#123; invoice_number
-                                                &#125;&#125;</code>, <code>&#123;&#123; date &#125;&#125;</code>, <code>&#123;&#123; amount
-                                                &#125;&#125;</code>, <code>&#123;&#123; customer_name &#125;&#125;</code><br>
-                                            <code>&#123;&#123; customer_name_arabic &#125;&#125;</code>, <code>&#123;&#123; project_name
-                                                &#125;&#125;</code>, <code>&#123;&#123; unit_number &#125;&#125;</code>, <code>&#123;&#123;
-                                                unit_area &#125;&#125;</code><br>
-                                            <code>&#123;&#123; payment_plan_id &#125;&#125;</code>, <code>&#123;&#123; down_payment
-                                                &#125;&#125;</code>, <code>&#123;&#123; contract_date &#125;&#125;</code><br>
-                                            <strong>Special:</strong> <code>&#123;&#123; checks_table &#125;&#125;</code> - Generates
-                                            automatic checks table
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <h6>Invoice Fields:</h6>
+                                                    <code>&#123;&#123; company_name &#125;&#125;</code>, <code>&#123;&#123; invoice_number &#125;&#125;</code>, <code>&#123;&#123; date &#125;&#125;</code>, <code>&#123;&#123; amount &#125;&#125;</code>, <code>&#123;&#123; customer_name &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; subject &#125;&#125;</code>, <code>&#123;&#123; contract_number &#125;&#125;</code>, <code>&#123;&#123; due_date &#125;&#125;</code>, <code>&#123;&#123; subtotal &#125;&#125;</code>, <code>&#123;&#123; balance &#125;&#125;</code>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <h6>Payment Plan Fields:</h6>
+                                                    <code>&#123;&#123; payment_options &#125;&#125;</code>, <code>&#123;&#123; down_payment &#125;&#125;</code>, <code>&#123;&#123; payment_method &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; unit_price &#125;&#125;</code>, <code>&#123;&#123; maintenance_fee &#125;&#125;</code>, <code>&#123;&#123; handover_payment &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; first_installment_date &#125;&#125;</code>, <code>&#123;&#123; down_payment_percent &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; customer_employment_name &#125;&#125;</code>, <code>&#123;&#123; bank_name &#125;&#125;</code>, <code>&#123;&#123; quarterly &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; half_yearly &#125;&#125;</code>, <code>&#123;&#123; annual &#125;&#125;</code>, <code>&#123;&#123; year_of_handover_payment &#125;&#125;</code>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <h6>Project Fields:</h6>
+                                                    <code>&#123;&#123; project_name &#125;&#125;</code>, <code>&#123;&#123; unit_number &#125;&#125;</code>, <code>&#123;&#123; unit_area &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; contract_date &#125;&#125;</code>, <code>&#123;&#123; developer_name &#125;&#125;</code>, <code>&#123;&#123; unit_type &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; project_category &#125;&#125;</code>, <code>&#123;&#123; project_location &#125;&#125;</code>, <code>&#123;&#123; unit_category &#125;&#125;</code><br>
+                                                    <code>&#123;&#123; contract_status &#125;&#125;</code>
+                                                </div>
+                                            </div>
+                                            <div class="mt-2">
+                                                <strong>Special:</strong> <code>&#123;&#123; checks_table &#125;&#125;</code> - Generates automatic checks table
+                                            </div>
                                         </div>
 
                                         <div class="alert alert-warning">
-                                            <strong>For complete field reference:</strong> <a
-                                                href="{{ route('pdf-templates.create') }}" target="_blank">Open Create
-                                                Template page</a> to see all available placeholders.
+                                            <strong>Complete Field Reference:</strong><br>
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <strong>Invoice Model:</strong><br>
+                                                    invoiceid, subject, contract_number, salesorderid, customerno, contactid, invoicedate, duedate, purchaseorder, adjustment, salescommission, exciseduty, subtotal, total, taxtype, discount_percent, discount_amount, s_h_amount, accountid, invoicestatus, currency_id, conversion_rate, terms_conditions, invoice_no, pre_tax_total, received, balance, s_h_percent, potential_id, tags, region_id
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <strong>InvoiceCF Model:</strong><br>
+                                                    cf_1183 (Check Date), cf_1185 (Unit Type), cf_1187 (Tax Start Date), cf_1189 (Next Date), cf_1191 (Contract Date), cf_1193 (Partial invoice), cf_1195 (Payment Plan), cf_1197 (تعديل الباقى), cf_1199 (Currency type), cf_1201 (Next Follow Details), cf_1203 (Developer Name), cf_1207 (Unit No), cf_1209 (Company%), cf_1211 (اجمالى ثمن الوحدة), cf_1213 (Unit Area), cf_1215 (No. of Floors), cf_1217 (Incentive%), cf_1219 (Unit Number), cf_1221 (المقدم), cf_1223 (Incentive Caim Date), cf_1225 (Incentive % Man), cf_1227 (Manager ID), cf_1229 (Manager Name), cf_1231 (Client Name), cf_1233 (8 years), cf_1235 (Incentive Man Caim Date), cf_1237 (10 Years), cf_1239 (16 yrs 20%), cf_1241 (16 yrs 10%), cf_1243 (16 yrs 15%), cf_1245 (12 Years), cf_1247 (Net value), cf_1249 (شهر التسليم), cf_1379 (88%), cf_1537 (Garden), cf_1539 (Building No.), cf_1541 (ثمن الوحدة بالحروف), cf_1543 (الباقى), cf_1545 (الباقى و قدره), cf_1547 (دفعة الحجز), cf_1549 (دفعة الحجز وقدره), cf_1551 (انه فى يوم), cf_1553 (ﻣﻦ ﺷﻬﺮ), cf_1555 (مبلغ صيانة), cf_1557 (ﻣﺒﻠﻎ ﺻﻴﺎﻧﻪ وقدره), cf_1559 (مبلغ 3), cf_1561 (مبلغ 3 وقدره), cf_1563 (مبلغ 4), cf_1565 (مبلغ 4 وقدره), cf_1567 (Unit Area بالحروف), cf_1569 (سنة التسليم), cf_1573 (يوم رقم), cf_1575 (تعديل المقدم), cf_1591 (اضافة مساحة الجاردن فى العقد), cf_1629 (Confirm), cf_1631 (Confirm Comment), cf_1669 (Project Name), cf_1671 (Project Category), cf_1673 (Project Location), cf_1675 (Unit Category), cf_1677 (Contract Status), cf_1789 (Payment Plan Module)
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <strong>PaymentPlan Model:</strong><br>
+                                                    paymentplansid, unit<br><br>
+                                                    <strong>PaymentPlanCF Model:</strong><br>
+                                                    cf_1731 (Payment Options), cf_1733 (Down Payment), cf_1735 (Payment Method), cf_1739 (Reset), cf_1741 (Unit Area), cf_1743 (Meter Unit Price), cf_1745 (Garden Area), cf_1747 (Garden Meter Price), cf_1749 (Unit Price), cf_1757 (Customer Employment Name), cf_1759 (Bank Name), cf_1761 (Quarterly), cf_1763 (Half Yearly), cf_1765 (Annual), cf_1767 (Handover Payment), cf_1769 (Year of Handover Payment), cf_1773 (Contract), cf_1775 (Maintenance Fee), cf_1777 (Maintenance Fee Value), cf_1779 (Maintenance Fee Collection Year), cf_1783 (Handover Payment Value), cf_1785 (1st Installment Date), cf_1787 (Down Payment %)
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -246,6 +275,9 @@
         </div>
     </div>
 
+    <!-- Google Fonts for Arabic -->
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Sans+Arabic:wght@100;200;300;400;500;600;700;800;900&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Tajawal:wght@200;300;400;500;700;800;900&family=Scheherazade+New:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@100;200;300;400;500;600;700&family=Changa:wght@200;300;400;500;600;700;800&family=Rubik:wght@300;400;500;600;700;800;900&family=Almarai:wght@300;400;700;800&family=El+Messiri:wght@400;500;600;700&family=Markazi+Text:wght@400;500;600;700&family=Reem+Kufi:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <!-- TinyMCE CDN -->
     <script src="https://cdn.tiny.cloud/1/4m78n7o3orjvbv6nk85kyfqwbro9vh5uspvkdixdx8z6rjvz/tinymce/6/tinymce.min.js"
         referrerpolicy="origin"></script>
@@ -260,6 +292,7 @@
             menubar: false,
             branding: false,
             promotion: false,
+            font_family_formats: 'Arial=arial,helvetica,sans-serif; Courier New=courier new,courier; Georgia=georgia,palatino; Helvetica=helvetica; Impact=impact,chicago; Tahoma=tahoma,arial,helvetica,sans-serif; Times New Roman=times new roman,times; Trebuchet MS=trebuchet ms,geneva; Verdana=verdana,geneva; Amiri=Amiri,serif; Noto Sans Arabic=Noto Sans Arabic,sans-serif; Cairo=Cairo,sans-serif; Tajawal=Tajawal,sans-serif; Scheherazade New=Scheherazade New,serif; IBM Plex Sans Arabic=IBM Plex Sans Arabic,sans-serif; Changa=Changa,sans-serif; Rubik=Rubik,sans-serif; Almarai=Almarai,sans-serif; El Messiri=El Messiri,serif; Markazi Text=Markazi Text,serif; Reem Kufi=Reem Kufi,sans-serif',
             content_style: 'body { font-family: Arial, Tahoma, sans-serif; } .page-break { page-break-before: always; margin-top: 20px; border-top: 2px dashed #ccc; padding-top: 10px; } .no-break { page-break-inside: avoid; } @media print { .page-break { border: none; background: none; padding: 0; margin: 0; height: 0; overflow: hidden; } }',
             setup: function(editor) {
                 // Hide the original textarea after TinyMCE is initialized
@@ -298,6 +331,7 @@
             }
         });
 
+
         // Initialize header and footer editors
         tinymce.init({
             selector: '#header_html',
@@ -309,6 +343,7 @@
             menubar: false,
             branding: false,
             promotion: false,
+            font_family_formats: 'Arial=arial,helvetica,sans-serif; Courier New=courier new,courier; Georgia=georgia,palatino; Helvetica=helvetica; Impact=impact,chicago; Tahoma=tahoma,arial,helvetica,sans-serif; Times New Roman=times new roman,times; Trebuchet MS=trebuchet ms,geneva; Verdana=verdana,geneva; Amiri=Amiri,serif; Noto Sans Arabic=Noto Sans Arabic,sans-serif; Cairo=Cairo,sans-serif; Tajawal=Tajawal,sans-serif; Scheherazade New=Scheherazade New,serif; IBM Plex Sans Arabic=IBM Plex Sans Arabic,sans-serif; Changa=Changa,sans-serif; Rubik=Rubik,sans-serif; Almarai=Almarai,sans-serif; El Messiri=El Messiri,serif; Markazi Text=Markazi Text,serif; Reem Kufi=Reem Kufi,sans-serif',
             content_style: 'body { font-family: Arial, Tahoma, sans-serif; }',
             setup: function(editor) {
                 // Sync content with textarea
@@ -328,6 +363,7 @@
             menubar: false,
             branding: false,
             promotion: false,
+            font_family_formats: 'Arial=arial,helvetica,sans-serif; Courier New=courier new,courier; Georgia=georgia,palatino; Helvetica=helvetica; Impact=impact,chicago; Tahoma=tahoma,arial,helvetica,sans-serif; Times New Roman=times new roman,times; Trebuchet MS=trebuchet ms,geneva; Verdana=verdana,geneva; Amiri=Amiri,serif; Noto Sans Arabic=Noto Sans Arabic,sans-serif; Cairo=Cairo,sans-serif; Tajawal=Tajawal,sans-serif; Scheherazade New=Scheherazade New,serif; IBM Plex Sans Arabic=IBM Plex Sans Arabic,sans-serif; Changa=Changa,sans-serif; Rubik=Rubik,sans-serif; Almarai=Almarai,sans-serif; El Messiri=El Messiri,serif; Markazi Text=Markazi Text,serif; Reem Kufi=Reem Kufi,sans-serif',
             content_style: 'body { font-family: Arial, Tahoma, sans-serif; }',
             setup: function(editor) {
                 // Sync content with textarea
